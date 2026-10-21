@@ -1,6 +1,6 @@
 # Ora Attachments Exporter
 
-Ora (ora.pm) is shutting down. Its JSON and CSV exports only contain **links** to the files attached to your tasks (images, PDFs, etc.). Those files are stored on Amazon S3 and will disappear along with Ora.
+Ora (ora.pm) is shutting down on Saturday, October 31, 2026. Its JSON and CSV exports only contain **links** to the files attached to your tasks (images, PDFs, etc.). Those files are stored on Amazon S3 and will disappear along with Ora.
 
 This tool downloads those files to your computer and sorts them into folders: one per project, and one per task.
 
