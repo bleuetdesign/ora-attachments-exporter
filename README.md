@@ -25,7 +25,7 @@ First, export **each project** as JSON, while Ora still works:
 
 1. In Ora, open the project.
 2. Click the **`…`** button, then **Export Project**.
-3. At the very bottom of the window, under **Entire Project**, click **Export as JSON** (circled in red below). Do not use **Export as CSV**: it contains almost no attachments.
+3. At the very bottom of the window, under **Entire Project**, click **Export as JSON** (circled in red below). **Export as CSV**: isn't the correct format to locate attachments, as it contains almost none.
 
    <img src="docs/export-as-json.jpeg" alt="Ora's Export Project window, with the Export as JSON button circled in red" width="240">
 
