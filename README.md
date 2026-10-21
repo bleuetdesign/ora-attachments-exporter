@@ -48,8 +48,6 @@ Terminal is a window where you type commands.
 1. Press **⌘ Command** and **Space** at the same time.
 2. Type **`Terminal`**, then press **Return**.
 
-A window with some text opens. That's normal.
-
 ### Step 3 — Check that Python is there (only once)
 
 In Terminal, type exactly this, then press **Return**:
@@ -106,10 +104,6 @@ A **`missing_remote`** failure (code 403 or 404) means the file no longer exists
 Type **`python3`** and a space, drag **`ora_attachments.py`**, type **`verify --out`** and a space, drag the **`Ora - Attachments`** folder, then press **Return**.
 
 You should see `… file(s) verified without problems`. Files marked `missing_remote` are also listed as problems, which is normal.
-
-### Step 7 — Make a backup copy
-
-Copy the **`Ora - Attachments`** folder to an external drive or to your cloud storage (iCloud, Google Drive…). If you like, run step 6 on the copy to make sure it is complete.
 
 ### What you will find in `Ora - Attachments`
 
@@ -177,7 +171,6 @@ The CSV has **no attachment column** and only contains active tasks. The only fi
 - It **never** calls the Ora API (`api.ora.pm`, GraphQL, WebSocket) and never logs in to **any** account. It only makes HTTP GET requests to the public URLs found in the exports.
 - It **never** writes into the exports folder.
 - It does not download external links (Google Drive, Figma…): it lists them in `external-links.csv`.
-- It downloads one file at a time, with a 100 ms pause between files.
 
 ### Privacy
 
