@@ -1,0 +1,19 @@
+# Never commit real data
+manifest.json
+manifest.csv
+external-links.csv
+liens-externes.csv
+*.part
+*.tmp
+out/
+output/
+exports/
+_pictures/
+*.json
+!tests/**/*.json
+__pycache__/
+*.pyc
+.DS_Store
+
+# Private handoff notes
+NOTES-REPRISE.md
