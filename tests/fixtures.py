@@ -68,7 +68,8 @@ def _project_json():
             {"id": 1005, "uploadDate": "2024-06-21T10:00:00Z", "taskId": 123456, "url": ATT + "1005eee.svg",
              "externalUrl": "", "fileTitle": "diagram", "fileSize": str(SIZES["ora-attachments/1005eee.svg"]),
              "fileType": "image/svg+xml"},
-            {"id": 1007, "uploadDate": "2024-06-22T10:00:00Z", "taskId": 800003, "url": ATT + "1007ggg.png",
+            # Some exports put only the S3 key in "url", not a full URL.
+            {"id": 1007, "uploadDate": "2024-06-22T10:00:00Z", "taskId": 800003, "url": "1007ggg.png",
              "externalUrl": "", "fileTitle": "last.png", "fileSize": str(SIZES["ora-attachments/1007ggg.png"]),
              "fileType": "png"},
         ],

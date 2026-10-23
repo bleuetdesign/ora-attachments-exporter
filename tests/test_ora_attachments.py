@@ -124,6 +124,13 @@ class TestHelpers(unittest.TestCase):
         self.assertEqual(oa.split_id_param("https://h/k.png?id=42"), ("https://h/k.png", "42"))
         self.assertEqual(oa.split_id_param("https://h/k.png"), ("https://h/k.png", None))
 
+    def test_resolve_url(self):
+        self.assertEqual(oa.resolve_url("1007ggg.png"), "https://ora-attachments.s3.amazonaws.com/1007ggg.png")
+        self.assertEqual(oa.resolve_url("a b.png"), "https://ora-attachments.s3.amazonaws.com/a%20b.png")
+        self.assertEqual(oa.resolve_url("https://h/k.png?1"), "https://h/k.png?1")
+        self.assertEqual(oa.resolve_url(None), "")
+        self.assertEqual(oa.resolve_url("  "), "")
+
     def test_s3_key(self):
         self.assertEqual(oa.s3_key("https://ora-projects.s3.amazonaws.com/default-09.svg?1715"), "default-09.svg")
 
@@ -155,6 +162,9 @@ class TestPlan(Base):
         # task whose list is missing
         self.assertEqual(e["1003"]["listName"], "")
         self.assertEqual(e["1001"]["listName"], "To do")
+        # bare S3 key in "url" → full URL in the attachments bucket
+        self.assertEqual(e["1007"]["sourceUrl"], "https://ora-attachments.s3.amazonaws.com/1007ggg.png")
+        self.assertEqual(e["1007"]["localPath"], "Demo Project/#13 - Archived task/1007 - last.png")
         # URL only in the description, ?id= removed
         self.assertEqual(e["9999"]["source"], "description")
         self.assertEqual(e["9999"]["sourceUrl"], "https://ora-attachments.s3.amazonaws.com/9999desc.png")
@@ -196,6 +206,7 @@ class TestExport(Base):
         self.assertEqual(before, snapshot(self.exports), "the exports folder must stay untouched")
         m = self.by_id()
         self.assertEqual(m[("1004", "800002")]["status"], "missing_remote")
+        self.assertEqual(m[("1007", "800003")]["status"], "ok")
         ok = [e for e in self.manifest() if e["status"] == "ok"]
         for e in ok:
             data = (self.out / e["localPath"]).read_bytes()

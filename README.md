@@ -187,3 +187,7 @@ The tests use fictitious fixtures and a local fake S3 server. No real data is st
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+## Thanks
+
+- [u/Logical_Speed_8622](https://www.reddit.com/user/Logical_Speed_8622/) on Reddit, for finding and fixing the bare S3 key bug in 1.1.0.

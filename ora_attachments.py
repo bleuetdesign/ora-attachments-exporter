@@ -26,12 +26,15 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import parse_qsl, unquote, urlencode, urlsplit, urlunsplit
+from urllib.parse import parse_qsl, quote, unquote, urlencode, urlsplit, urlunsplit
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 USER_AGENT = "ora-attachments-exporter/" + __version__
 
 S3_URL_RE = re.compile(r"https?://[A-Za-z0-9.-]+\.amazonaws\.com/[^\s()\[\]<>\"'`]+")
+# In some exports, the "url" field of an attachment holds only the S3 key (e.g. "3411084c...f7261.zip"),
+# not a full URL. These keys live in this bucket:
+ATTACHMENTS_BASE = "https://ora-attachments.s3.amazonaws.com/"
 ANY_URL_RE = re.compile(r"https?://[^\s()\[\]<>\"'`]+")
 TRAILING_PUNCT = ".,;:!?"
 FORBIDDEN_RE = re.compile(r'[/\\:*?"<>|\x00-\x1f\x7f]')
@@ -125,6 +128,14 @@ def sanitize_name(name, max_len=100, keep_ext=True):
     if len(stem) + len(ext) > max_len:
         stem = stem[: max_len - len(ext)].rstrip(". ")
     return (stem + ext).rstrip(". ") or "_"
+
+
+def resolve_url(raw):
+    """Turns a bare S3 key from the JSON "url" field into a full download URL."""
+    raw = (raw or "").strip()
+    if raw and not urlsplit(raw).scheme:
+        return ATTACHMENTS_BASE + quote(raw.lstrip("/"), safe="/")
+    return raw
 
 
 def s3_key(url):
@@ -336,7 +347,7 @@ def _plan_json(plan, stem, data, att_keys, att_ids, pictures, seen_members):
                     listName=lists.get(sid(t.get("listId")), ""))
 
     for a in data.get("attachments") or []:
-        raw = (a.get("url") or a.get("externalUrl") or "").strip()
+        raw = resolve_url(a.get("url")) or (a.get("externalUrl") or "").strip()
         url, _ = split_id_param(raw) if raw else ("", None)
         aid = sid(a.get("id"))
         plan.add(new_entry(
