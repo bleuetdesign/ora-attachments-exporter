@@ -170,6 +170,15 @@ class TestPlan(Base):
         self.assertEqual(e["9999"]["sourceUrl"], "https://ora-attachments.s3.amazonaws.com/9999desc.png")
         self.assertIn("csv", out.lower())  # the CSV-only project is announced
 
+    def test_complement_file_skipped(self):
+        complement = {"format": "ora-complement", "version": 1, "projects": {"70001": "Demo Project"}, "responses": {}}
+        (self.exports / "ora-complement-2026-10-24.json").write_text(json.dumps(complement), encoding="utf-8")
+        plan = oa.collect(self.exports, "auto", pictures=False)
+        self.assertNotIn("ora-complement-2026-10-24", plan.projects)
+        self.assertEqual(sorted(plan.projects), ["CSV-only Project", "Demo Project"])
+        with self.assertRaises(oa.UsageError):
+            oa.collect(self.exports / "ora-complement-2026-10-24.json", "auto", pictures=False)
+
     def test_csv_source(self):
         plan = oa.collect(self.exports / "CSV-only Project.csv", "auto", pictures=False)
         self.assertEqual(len(plan.entries), 1)

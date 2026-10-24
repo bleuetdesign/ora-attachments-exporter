@@ -28,7 +28,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import parse_qsl, quote, unquote, urlencode, urlsplit, urlunsplit
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"
+COMPLEMENT_FORMAT = "ora-complement"  # file written by ora_complement.js
 USER_AGENT = "ora-attachments-exporter/" + __version__
 
 S3_URL_RE = re.compile(r"https?://[A-Za-z0-9.-]+\.amazonaws\.com/[^\s()\[\]<>\"'`]+")
@@ -310,6 +311,8 @@ def collect(exports, source="auto", pictures=False):
     for stem, kind, path in chosen:
         if kind == "json":
             data = json.loads(path.read_text(encoding="utf-8-sig"))
+            if isinstance(data, dict) and data.get("format") == COMPLEMENT_FORMAT:
+                continue  # ora_complement.js output: no attachments to download, kept as is
             for a in data.get("attachments") or []:
                 att_ids.add(sid(a.get("id")))
                 url = (a.get("url") or a.get("externalUrl") or "").strip()
@@ -319,6 +322,8 @@ def collect(exports, source="auto", pictures=False):
         else:
             with open(path, newline="", encoding="utf-8-sig") as f:
                 loaded.append((stem, kind, list(csv.DictReader(f))))
+    if not loaded:
+        raise UsageError("No project export found in %s (only the ora_complement.js file)" % exports)
     seen_members = set()
     for stem, kind, data in loaded:
         if kind == "json":

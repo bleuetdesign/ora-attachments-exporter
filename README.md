@@ -4,6 +4,8 @@ Ora (ora.pm) is shutting down on Saturday, October 31, 2026. Its JSON and CSV ex
 
 This tool downloads those files to your computer and sorts them into folders: one per project, and one per task.
 
+It comes with a second, optional script, **`ora_complement.js`**, that saves what the JSON export leaves out: the order of lists and tasks, custom fields, views, sprints, Team Chat… (see [step 1b](#step-1b--save-what-the-json-export-leaves-out-recommended)).
+
 > ⏰ **Do it soon.** Once Ora shuts down, the files can no longer be downloaded.
 
 ---
@@ -17,6 +19,7 @@ Allow about 15 minutes the first time. Nothing to buy, no account needed.
 - A Mac connected to the Internet.
 - The file **`ora_attachments.py`** (this tool).
 - Your **Ora exports**: one **`.json`** file per project (see step 1). The `.csv` export is only a last resort: it contains almost no attachments.
+- Optional: **Google Chrome** (or another browser) for step 1b.
 - You do **not** need the Ora app.
 
 ### Step 1 — Export your projects from Ora and prepare your folders
@@ -30,7 +33,7 @@ First, export **each project** as JSON, while Ora still works:
    <img src="docs/export-as-json.jpeg" alt="Ora's Export Project window, with the Export as JSON button circled in red" width="240">
 
 4. A `.json` file named after the project is downloaded, usually into your **Downloads** folder.
-5. Repeat for each project.
+5. Repeat for each project. Ora exports one project at a time, so it is easy to miss one: think of projects inside folders, in other organizations, and archived ones. The script of step 1b lists all your projects, which helps you check.
 
 Then prepare your folders:
 
@@ -40,6 +43,29 @@ Then prepare your folders:
 4. Put the file **`ora_attachments.py`** in **Documents**.
 
 > ⚠️ The `Ora - Attachments` folder must **not** be inside the `Ora - Exports` folder. The tool refuses to write into the exports folder, to protect your exports.
+
+### Step 1b — Save what the JSON export leaves out (recommended)
+
+Ora's JSON export does not contain:
+
+- the **order** of the lists, and of the tasks inside each list (an import elsewhere would come out shuffled);
+- **custom fields**, list **automations** (workflows), **views**, **sprints** and story points, **recurring tasks**, task **templates**;
+- your **folders** and **favorites**;
+- **Team Chat** channels and messages.
+
+The script **`ora_complement.js`** saves all of this in a single file, from your browser, while you are logged in to Ora. It takes a few minutes. Nothing reads this file yet: it holds Ora's own answers, unchanged, so that a future import into another tool can rebuild your projects as they were. Keep it with your exports.
+
+1. Open [`ora_complement.js`](ora_complement.js) on GitHub and click the **Copy raw file** button (the two-squares icon above the code).
+2. In Chrome, open **https://app.ora.pm** and log in.
+3. Open the **console**: press **⌥ Option + ⌘ Command + J** (Windows and Linux: **Ctrl + Shift + J**).
+4. The first time, Chrome refuses the paste and asks you to type **`allow pasting`**: type it, then press **Return**. This warning protects you: only paste code you trust. You can read this script first: it is short, it only reads, it only talks to Ora, and it does not put your session key in the file.
+5. Paste (**⌘ Command + V**), then press **Return**.
+6. Lines appear, one per project: `Project 3/38: …`. **Keep the tab open** until the line `Done` appears.
+7. The file **`ora-complement-<date>.json`** is in your **Downloads** folder. Move it into **`Ora - Exports`**, with the other files. `ora_attachments.py` recognizes it and leaves it alone.
+
+At the top of the script, `chat: true` saves Team Chat and `history: false` skips the full activity history of each project. That history needs many more requests; set it to `true` if you want it.
+
+Other browsers: in **Firefox**, the console opens with **⌥ Option + ⌘ Command + K**. In **Safari**, first turn on **Settings → Advanced → Show features for web developers**, then press **⌥ Option + ⌘ Command + C**.
 
 ### Step 2 — Open Terminal
 
@@ -169,12 +195,13 @@ The CSV has **no attachment column** and only contains active tasks. The only fi
 ### What the tool does not do
 
 - It **never** calls the Ora API (`api.ora.pm`, GraphQL, WebSocket) and never logs in to **any** account. It only makes HTTP GET requests to the public URLs found in the exports.
+- `ora_complement.js` (step 1b) is the only part that talks to Ora. It runs in your browser, with the session you are logged in with, and only sends read requests from a fixed list, one at a time.
 - It **never** writes into the exports folder.
 - It does not download external links (Google Drive, Figma…): it lists them in `external-links.csv`.
 
 ### Privacy
 
-S3 links are public, and JSON exports contain the members' email addresses. Sharing the script is fine. Do not share your exports or your `Ora - Attachments` folder.
+S3 links are public, and JSON exports contain the members' email addresses. The `ora-complement` file also contains your Team Chat messages. Sharing the scripts is fine. Do not share your exports, your `ora-complement` file or your `Ora - Attachments` folder.
 
 ### Tests
 
