@@ -1,4 +1,4 @@
-// Save my Ora 2.0.0 — https://github.com/bleuetdesign/ora-attachments-exporter
+// Save my Ora 1.2.0 — https://github.com/bleuetdesign/ora-attachments-exporter
 //
 // Saves all your Ora data in one ZIP file, "ora-backup-<date>.zip":
 // - the official "Export as JSON" file of every project you administer (the same file Ora's button gives);
