@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Save my Ora</title>
+<meta name="description" content="Save all your Ora (ora.pm) data before it shuts down on October 31, 2026.">
+<style>
+  :root {
+    --bg: #f7f8fa; --card: #fff; --text: #1f2328; --muted: #59636e; --accent: #1b9af7; --accent-text: #fff;
+    --border: #d8dee4; --code: #eef1f4;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0d1117; --card: #161b22; --text: #e6edf3; --muted: #9198a1; --accent: #4aa8ff; --accent-text: #0d1117;
+      --border: #30363d; --code: #21262d;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0d1117; --card: #161b22; --text: #e6edf3; --muted: #9198a1; --accent: #4aa8ff; --accent-text: #0d1117;
+    --border: #30363d; --code: #21262d;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 680px; margin: 0 auto; padding: 40px 16px 64px; }
+  h1 { font-size: 30px; margin: 0 0 6px; }
+  .lead { color: var(--muted); margin: 0 0 28px; }
+  ol.steps { list-style: none; padding: 0; margin: 0; counter-reset: step; }
+  ol.steps > li {
+    counter-increment: step; position: relative; background: var(--card); border: 1px solid var(--border);
+    border-radius: 12px; padding: 18px 20px 18px 64px; margin-bottom: 14px;
+  }
+  ol.steps > li::before {
+    content: counter(step); position: absolute; left: 18px; top: 16px; width: 32px; height: 32px; border-radius: 50%;
+    background: var(--accent); color: var(--accent-text); font-weight: 700; display: grid; place-items: center;
+  }
+  h2 { font-size: 18px; margin: 2px 0 6px; }
+  p { margin: 6px 0; }
+  .bookmarklet {
+    display: inline-block; margin: 10px 0 4px; padding: 10px 20px; border-radius: 8px; background: var(--accent);
+    color: var(--accent-text); font-weight: 700; text-decoration: none; cursor: grab; user-select: none;
+  }
+  .button { cursor: pointer; }
+  .bookmarklet[aria-disabled="true"] { opacity: .5; cursor: wait; }
+  .hint { color: var(--muted); font-size: 14px; }
+  code, kbd { background: var(--code); border-radius: 4px; padding: 1px 5px; font-size: 14px; }
+  kbd { border: 1px solid var(--border); }
+  a { color: var(--accent); }
+  #message { min-height: 1.5em; color: var(--muted); font-size: 14px; }
+  details { margin-top: 28px; }
+  summary { cursor: pointer; font-weight: 600; }
+  footer { margin-top: 36px; color: var(--muted); font-size: 14px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Save my Ora</h1>
+  <p class="lead">Ora (ora.pm) shuts down on Saturday, October 31, 2026. Save your projects, their order, your custom
+    fields, Team Chat and your attachments, in a few minutes.</p>
+
+  <ol class="steps">
+    <li>
+      <h2>Drag this button to your bookmarks bar</h2>
+      <a class="bookmarklet" id="bookmarklet" href="#" aria-disabled="true" draggable="true">Save my Ora</a>
+      <p id="message"></p>
+      <p class="hint">Bookmarks bar hidden? Show it with <kbd>⌘</kbd> <kbd>Shift</kbd> <kbd>B</kbd>
+        (Windows and Linux: <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>B</kbd>). In Safari: View → Show Favorites Bar.</p>
+    </li>
+    <li>
+      <h2>Open Ora and click the bookmark</h2>
+      <p>Go to <a href="https://app.ora.pm">app.ora.pm</a>, log in, then click <strong>Save my Ora</strong> in your
+        bookmarks bar. A box shows the progress. Leave the tab open until it says <strong>Done</strong>.</p>
+      <p>The file <code>ora-backup-&lt;date&gt;.zip</code> lands in your <strong>Downloads</strong> folder.</p>
+    </li>
+    <li>
+      <h2>Download the attachments</h2>
+      <p>Your attached files (images, PDFs…) are not in the ZIP: they are stored separately by Ora, and a web page is
+        not allowed to download them. Get the small program that does it:</p>
+      <a class="bookmarklet button" id="program" href="https://github.com/bleuetdesign/ora-attachments-exporter/blob/main/ora_attachments.py">Download ora_attachments.py</a>
+      <p>It lands in your Downloads folder too. Then, on a Mac:</p>
+      <p>Open <strong>Terminal</strong> (<kbd>⌘</kbd> <kbd>Space</kbd>, type <code>Terminal</code>, <kbd>Return</kbd>),
+        type <code>python3</code> followed by a space, drag <code>ora_attachments.py</code> into the window, then press
+        <kbd>Return</kbd>.</p>
+      <p>It finds the ZIP by itself and puts the files in <strong>Documents → Ora - Attachments</strong>.
+        <a href="https://github.com/bleuetdesign/ora-attachments-exporter#readme">Windows, Linux and help</a>.</p>
+    </li>
+  </ol>
+
+  <details>
+    <summary>What is in the ZIP, and is it safe?</summary>
+    <p>The ZIP holds the official <em>Export as JSON</em> file of every project you administer (the same file as Ora's
+      own button) and <code>ora-complement.json</code>: what that export leaves out (the order of lists and tasks,
+      custom fields, workflows, views, sprints, recurring tasks, templates, folders, favorites, Team Chat), for every
+      project you can see. Nothing reads the complement yet: keep it, it lets a future import rebuild your projects as
+      they were.</p>
+    <p>The bookmark only <strong>reads</strong>: every request is checked against a fixed list of read requests. It
+      talks only to Ora, with the session you are logged in with, one request at a time. Nothing is sent anywhere else
+      and your session key is not saved in the file. <a href="ora_backup.js">Read the code</a>.</p>
+    <p>The ZIP contains your teammates' names and email addresses and your chat messages: do not share it.</p>
+  </details>
+
+  <footer>Independent project, not affiliated with Ora. Made with gratitude for a great piece of software.
+    <a href="https://github.com/bleuetdesign/ora-attachments-exporter">Source on GitHub</a> · MIT license.</footer>
+</main>
+<script>
+  // The bookmark is built from ora_backup.js, served next to this page, so both always match.
+  const link = document.getElementById('bookmarklet');
+  const message = document.getElementById('message');
+  fetch('ora_backup.js', { cache: 'no-cache' })
+    .then((r) => { if (!r.ok) throw new Error(r.status); return r.text(); })
+    .then((code) => {
+      const body = code.split('\n').filter((l) => !/^\s*\/\//.test(l)).join('\n').trim().replace(/;$/, '');
+      link.href = 'javascript:void ' + encodeURIComponent(body);
+      link.removeAttribute('aria-disabled');
+      link.title = 'Drag me to your bookmarks bar';
+    })
+    .catch(() => { message.textContent = 'The button could not be prepared. Reload the page.'; });
+  // GitHub shows .py files as text: fetch it and hand it over as a download instead.
+  const program = document.getElementById('program');
+  program.addEventListener('click', (e) => {
+    e.preventDefault();
+    fetch('https://raw.githubusercontent.com/bleuetdesign/ora-attachments-exporter/main/ora_attachments.py')
+      .then((r) => { if (!r.ok) throw new Error(r.status); return r.blob(); })
+      .then((b) => {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([b], { type: 'text/x-python' }));
+        a.download = 'ora_attachments.py';
+        a.click();
+      })
+      .catch(() => { location.href = program.href; });
+  });
+  link.addEventListener('click', (e) => {
+    e.preventDefault();
+    message.textContent = 'Don’t click it here: drag it to your bookmarks bar, then click it on app.ora.pm.';
+  });
+</script>
+</body>
+</html>

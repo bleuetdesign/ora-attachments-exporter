@@ -8,9 +8,11 @@ import sys
 import tempfile
 import threading
 import unittest
+import zipfile
 from contextlib import redirect_stdout
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from unittest import mock
 from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -178,6 +180,46 @@ class TestPlan(Base):
         self.assertEqual(sorted(plan.projects), ["CSV-only Project", "Demo Project"])
         with self.assertRaises(oa.UsageError):
             oa.collect(self.exports / "ora-complement-2026-10-24.json", "auto", pictures=False)
+
+    def zip_exports(self, name="ora-backup-2026-10-24.zip"):
+        z = self.tmp / "downloads" / name
+        z.parent.mkdir(exist_ok=True)
+        with zipfile.ZipFile(z, "w") as zf:
+            for p in self.exports.iterdir():
+                zf.write(p, p.name)
+            zf.writestr("ora-complement.json", json.dumps({"format": "ora-complement", "version": 1}))
+        return z
+
+    def test_zip_same_plan_as_folder(self):
+        key = lambda plan: sorted((e["localPath"], e["sourceUrl"]) for e in plan.entries)  # noqa: E731
+        self.assertEqual(key(oa.collect(self.zip_exports(), "auto")), key(oa.collect(self.exports, "auto")))
+
+    def test_default_exports_newest_zip_in_downloads(self):
+        old = self.zip_exports("ora-backup-2026-10-20.zip")
+        new = self.zip_exports("ora-backup-2026-10-24 (1).zip")
+        os.utime(old, (1, 1))
+        with mock.patch.object(oa, "DOWNLOADS", new.parent):
+            self.assertEqual(oa.default_exports(), new)
+        with mock.patch.object(oa, "DOWNLOADS", self.tmp / "empty"):
+            with self.assertRaises(oa.UsageError):
+                oa.default_exports()
+
+    def test_no_arguments_uses_zip_and_default_folder(self):
+        z = self.zip_exports()
+        out = self.tmp / "Documents" / "Ora - Attachments"
+        buf = io.StringIO()
+        with mock.patch.object(oa, "DOWNLOADS", z.parent), mock.patch.object(oa, "DEFAULT_OUT", out), \
+                mock.patch.object(oa.subprocess, "run") as run, redirect_stdout(buf):
+            code = oa.main([], downloader=self.downloader())
+        self.assertEqual(code, 1, buf.getvalue())  # the fixtures include a file missing on purpose
+        self.assertTrue((out / "manifest.json").exists())
+        self.assertTrue((out / "_pictures").is_dir(), "--pictures is on by default")
+        if sys.platform == "darwin":
+            run.assert_called_once_with(["open", str(out)], check=False)
+
+    def test_zip_output_next_to_it_allowed(self):
+        z = self.zip_exports()
+        oa.guard_paths(z, z.parent / "Ora - Attachments")  # no error: the ZIP is only read
 
     def test_csv_source(self):
         plan = oa.collect(self.exports / "CSV-only Project.csv", "auto", pictures=False)
@@ -362,6 +404,16 @@ class TestRelink(Base):
         st = {(e["attachmentId"], e["taskId"]): e["status"] for e in entries}
         self.assertEqual(st[("1002", "800001")], "ok")
         self.assertEqual(st[("9999", "800001")], "ok")
+
+
+
+class TestBookmark(unittest.TestCase):
+    def test_no_line_comment_inside_the_code(self):
+        """docs/ora_backup.js also runs as a javascript: bookmark, where a // comment could swallow the rest."""
+        js = Path(__file__).resolve().parent.parent / "docs" / "ora_backup.js"
+        for n, line in enumerate(js.read_text(encoding="utf-8").splitlines(), 1):
+            if not line.lstrip().startswith("//"):
+                self.assertNotRegex(line, r"(?<![:'\"])//", "line %d" % n)
 
 
 if __name__ == "__main__":

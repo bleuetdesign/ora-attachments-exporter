@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Standalone exporter for Ora (ora.pm) attachments.
 
-Reads Ora's JSON/CSV exports (read-only), downloads the attached files from
+Reads Ora's JSON/CSV exports, or the ZIP saved by the "Save my Ora" bookmark
+(read-only), downloads the attached files from
 their public S3 URLs and sorts them by project and by task.
 No call to the Ora API, no account login: only HTTP GET requests on the URLs
 found in the exports.
@@ -13,22 +14,28 @@ import argparse
 import csv
 import hashlib
 import http.client
+import io
 import json
 import mimetypes
 import os
 import re
 import shutil
 import ssl
+import subprocess
 import sys
 import time
 import unicodedata
 import urllib.error
 import urllib.request
+import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import parse_qsl, quote, unquote, urlencode, urlsplit, urlunsplit
 
-__version__ = "1.2.0"
+__version__ = "2.0.0"
+DOWNLOADS = Path.home() / "Downloads"
+DEFAULT_OUT = Path.home() / "Documents" / "Ora - Attachments"
+BOOKMARK_PAGE = "https://bleuetdesign.github.io/ora-attachments-exporter/"
 COMPLEMENT_FORMAT = "ora-complement"  # file written by ora_complement.js
 USER_AGENT = "ora-attachments-exporter/" + __version__
 
@@ -276,10 +283,40 @@ def file_name(attachment_id, title, url, file_type):
     return sanitize_name("%s - %s" % (attachment_id, title) if attachment_id else title)
 
 
+def default_exports():
+    """The newest ZIP saved by the "Save my Ora" bookmark in the Downloads folder."""
+    found = sorted(DOWNLOADS.glob("ora-backup-*.zip"), key=lambda p: p.stat().st_mtime)
+    if not found:
+        raise UsageError("No ora-backup-….zip file in %s. First save your data with the \"Save my Ora\" bookmark "
+                         "(%s), or give your exports with --exports." % (DOWNLOADS, BOOKMARK_PAGE))
+    return found[-1]
+
+
+def read_export(src):
+    """Text of an export: a file on disk, or ("zip", archive, member name)."""
+    if isinstance(src, tuple):
+        with zipfile.ZipFile(src[1]) as z:
+            return z.read(src[2]).decode("utf-8-sig")
+    return src.read_text(encoding="utf-8-sig")
+
+
 def find_exports(exports, source):
     """Returns [(stem, kind, path)]: one file per project according to --source."""
     if not exports.exists():
         raise UsageError("Exports not found: %s" % exports)
+    if exports.is_file() and exports.suffix.lower() == ".zip":
+        groups = {}
+        try:
+            with zipfile.ZipFile(exports) as z:
+                names = z.namelist()
+        except zipfile.BadZipFile:
+            raise UsageError("Damaged ZIP file: %s" % exports)
+        for name in sorted(names):
+            member = Path(name)
+            kind = member.suffix.lower().lstrip(".")
+            if kind in ("json", "csv") and not name.endswith("/") and "__MACOSX" not in member.parts:
+                groups.setdefault(member.stem, {})[kind] = ("zip", exports, name)
+        return _choose(groups, source, exports)
     if exports.is_file():
         kind = exports.suffix.lower().lstrip(".")
         if kind not in ("json", "csv"):
@@ -292,6 +329,10 @@ def find_exports(exports, source):
         kind = p.suffix.lower().lstrip(".")
         if p.is_file() and kind in ("json", "csv"):
             groups.setdefault(p.stem, {})[kind] = p
+    return _choose(groups, source, exports)
+
+
+def _choose(groups, source, exports):
     chosen = []
     for stem, kinds in sorted(groups.items()):
         kind = ("json" if "json" in kinds else "csv") if source == "auto" else source
@@ -310,7 +351,7 @@ def collect(exports, source="auto", pictures=False):
     att_keys, att_ids = set(), set()
     for stem, kind, path in chosen:
         if kind == "json":
-            data = json.loads(path.read_text(encoding="utf-8-sig"))
+            data = json.loads(read_export(path))
             if isinstance(data, dict) and data.get("format") == COMPLEMENT_FORMAT:
                 continue  # ora_complement.js output: no attachments to download, kept as is
             for a in data.get("attachments") or []:
@@ -320,8 +361,7 @@ def collect(exports, source="auto", pictures=False):
                     att_keys.add(s3_key(url))
             loaded.append((stem, kind, data))
         else:
-            with open(path, newline="", encoding="utf-8-sig") as f:
-                loaded.append((stem, kind, list(csv.DictReader(f))))
+            loaded.append((stem, kind, list(csv.DictReader(io.StringIO(read_export(path), newline="")))))
     if not loaded:
         raise UsageError("No project export found in %s (only the ora_complement.js file)" % exports)
     seen_members = set()
@@ -561,7 +601,9 @@ def load_manifest(path):
 # --------------------------------------------------------------------------- commands
 
 def guard_paths(exports, *outs):
-    """The exports folder is read-only: no output inside it."""
+    """The exports folder is read-only: no output inside it. A ZIP is only read, wherever the output goes."""
+    if exports.is_file() and exports.suffix.lower() == ".zip":
+        return
     root = exports.resolve() if exports.is_dir() else exports.resolve().parent
     for o in outs:
         r = o.resolve()
@@ -578,7 +620,9 @@ def remove_parts(out):
 
 
 def cmd_export(args, downloader):
-    exports, out = Path(args.exports).expanduser(), Path(args.out).expanduser()
+    exports = Path(args.exports).expanduser() if args.exports else default_exports()
+    out = Path(args.out).expanduser()
+    print("Reading %s\nSaving into %s\n" % (exports, out))
     guard_paths(exports, out)
     plan = collect(exports, args.source, args.pictures)
     if args.dry_run:
@@ -821,15 +865,21 @@ def build_parser():
     p.add_argument("--version", action="version", version=__version__)
     sub = p.add_subparsers(dest="command", required=True)
 
-    def common(sp):
-        sp.add_argument("--exports", required=True, help="exports folder or a single .json/.csv file")
-        sp.add_argument("--out", required=True, help="output folder (outside the exports folder)")
+    def common(sp, defaults=False):
+        if defaults:
+            sp.add_argument("--exports", help="exports folder, a single .json/.csv file or an ora-backup ZIP "
+                                              "(default: the newest ora-backup-*.zip in Downloads)")
+            sp.add_argument("--out", default=str(DEFAULT_OUT),
+                            help="output folder, outside the exports folder (default: %(default)s)")
+        else:
+            sp.add_argument("--exports", required=True, help="exports folder, a single .json/.csv file or a ZIP")
+            sp.add_argument("--out", required=True, help="output folder (outside the exports folder)")
         sp.add_argument("--source", choices=("json", "csv", "auto"), default="auto",
                         help="auto (default): JSON if present, otherwise CSV")
         sp.add_argument("--pictures", action="store_true", help="also save project and member pictures")
 
     e = sub.add_parser("export", help="download the files and sort them by project and task")
-    common(e)
+    common(e, defaults=True)
     e.add_argument("--dry-run", action="store_true", help="show what would be done, without writing anything")
     r = sub.add_parser("relink", help="sort already downloaded files, without downloading anything")
     common(r)
@@ -840,10 +890,15 @@ def build_parser():
 
 
 def main(argv=None, downloader=None):
-    args = build_parser().parse_args(argv)
+    argv = sys.argv[1:] if argv is None else argv
+    simple = not argv  # started with no arguments: everything by default, then show the result
+    args = build_parser().parse_args(argv or ["export", "--pictures"])
     try:
         if args.command == "export":
-            return cmd_export(args, downloader)
+            code = cmd_export(args, downloader)
+            if simple and sys.platform == "darwin" and Path(args.out).expanduser().is_dir():
+                subprocess.run(["open", str(Path(args.out).expanduser())], check=False)
+            return code
         if args.command == "relink":
             return cmd_relink(args)
         return cmd_verify(args)
