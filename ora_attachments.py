@@ -61,7 +61,7 @@ LINKS_FIELDS = ["project", "taskId", "task", "origin", "url"]
 NOT_DONE = "not processed: run interrupted before this file"
 NO_TASK_DIR = "_no-task"
 CSV_WARNING = (
-    "WARNING: {projects} read from CSV. The CSV has no attachment column and only contains "
+    "WARNING: {projects} read from CSV. Ora's default CSV has no attachment column and only contains "
     "active tasks. Only images embedded in task descriptions are found ({count} URLs here); "
     "all other attachments are NOT exported. Use the JSON export for a complete export."
 )
@@ -441,7 +441,8 @@ def _plan_csv(plan, stem, rows):
     name = stem
     pdir = plan.project_dir(name, stem)
     plan.projects.append(name)
-    plan.csv_projects.append(name)
+    if not any("Attachments" in r for r in rows[:1]):  # Ora's CSV with the Attachments option, or the bookmark's
+        plan.csv_projects.append(name)
     dirs = TaskDirs()
     for r in rows:
         dirs.register(r.get("Global ID"), r.get("ID"), r.get("Title") or "")
@@ -449,7 +450,8 @@ def _plan_csv(plan, stem, rows):
     for r in rows:
         tid = sid(r.get("Global ID"))
         desc = r.get("Description") or ""
-        for raw in S3_URL_RE.findall(desc):
+        listed = [u.strip() for u in re.split(r",(?=https?://)", r.get("Attachments") or "") if u.strip()]
+        for raw in [u for u in listed if is_s3(u)] + S3_URL_RE.findall(desc):
             url, aid = split_id_param(clean_found_url(raw))
             key = s3_key(url)
             if (tid, key) in seen:
@@ -461,6 +463,7 @@ def _plan_csv(plan, stem, rows):
                 localPath="/".join([pdir, dirs.get(tid), file_name(aid or "desc", key, url, "")]),
                 source="csv"))
         plan.add_links(name, tid, dirs.get(tid), "description", desc)
+        plan.add_links(name, tid, dirs.get(tid), "attachment", " ".join(u for u in listed if not is_s3(u)))
 
 
 # --------------------------------------------------------------------------- downloading

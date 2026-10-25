@@ -221,6 +221,17 @@ class TestPlan(Base):
         z = self.zip_exports()
         oa.guard_paths(z, z.parent / "Ora - Attachments")  # no error: the ZIP is only read
 
+    def test_csv_attachments_column(self):
+        """Ora's CSV with the Attachments option (and the bookmark's CSV) lists the files of each task."""
+        f = self.tmp / "With attachments.csv"
+        f.write_text("\ufeffGlobal ID,List,ID,Title,Description,Attachments\r\n"
+                     "900003,Done,9,Spec,,\"https://ora-attachments.s3.amazonaws.com/3001spec.pdf,"
+                     "https://drive.google.com/file/d/abc,def/view\"\r\n", encoding="utf-8")
+        plan = oa.collect(f, "auto", pictures=False)
+        self.assertEqual([e["sourceUrl"] for e in plan.entries], ["https://ora-attachments.s3.amazonaws.com/3001spec.pdf"])
+        self.assertEqual([l["url"] for l in plan.external_links], ["https://drive.google.com/file/d/abc,def/view"])
+        self.assertEqual(plan.csv_projects, [], "no CSV warning: this CSV has an attachment column")
+
     def test_csv_source(self):
         plan = oa.collect(self.exports / "CSV-only Project.csv", "auto", pictures=False)
         self.assertEqual(len(plan.entries), 1)

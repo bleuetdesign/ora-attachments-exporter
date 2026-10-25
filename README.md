@@ -2,8 +2,10 @@
 
 Ora (ora.pm) is shutting down on Saturday, October 31, 2026. This project saves your data before it disappears:
 
-- the **"Save my Ora" bookmark** saves your projects in one ZIP file: Ora's official JSON export of every project you administer, plus what that export leaves out (the order of lists and tasks, custom fields, views, sprints, Team Chat…);
-- **`ora_attachments.py`** then downloads the files attached to your tasks (images, PDFs…), which Ora stores separately, and sorts them by project and by task.
+1. the **"Save my Ora" bookmark** saves your projects in one ZIP file: Ora's official JSON export, a spreadsheet (CSV) of every project, and what Ora's exports leave out (the order of lists and tasks, custom fields, views, sprints, Team Chat…);
+2. **`ora_attachments.py`** then reads that ZIP and downloads the files attached to your tasks (images, PDFs…), which Ora stores separately, sorted by project and by task.
+
+Do them **in this order**: the second step needs the ZIP from the first. A web page cannot download the attached files itself (Ora's file servers forbid it), which is why there are two steps.
 
 > ⏰ **Do it soon.** Once Ora shuts down, nothing can be downloaded anymore.
 
@@ -46,6 +48,17 @@ external-links.csv             ← Google Drive, Figma… links for you to save 
 
 Keep the ZIP as well: it holds your projects themselves.
 
+### Which file is for what
+
+| File | What it is | What it is for |
+|---|---|---|
+| `<project>.json` (in the ZIP) | Ora's official **Export as JSON**, identical to its button | Importing your projects into another tool |
+| `<project>.csv` (in the ZIP) | A spreadsheet of every task, archived ones included, with comments, labels, custom fields and attachment links | Reading your tasks in Excel or Numbers |
+| `ora-complement.json` (in the ZIP) | Ora's own data for what the exports leave out | A future import that rebuilds your projects exactly |
+| `Ora - Attachments` folder | Your attached files, one folder per task | Keeping your files |
+
+You no longer need Ora's own **Export as JSON** and **Export as CSV** buttons: the bookmark gives you the same JSON, for all your projects at once, and a more complete CSV.
+
 ---
 
 ## Troubleshooting
@@ -56,7 +69,7 @@ Keep the ZIP as well: it holds your projects themselves.
 | `can't open file … ora_attachments.py` | **Drag** the file into Terminal instead of typing its name. |
 | `No ora-backup-….zip file in …/Downloads` | Do step 1 first, or move the ZIP back into **Downloads**. |
 | The bookmark does nothing | Click it on the **app.ora.pm** tab, once you are logged in. |
-| Fewer project exports than projects | Ora only gives its official export for projects you administer. The others are in `ora-complement.json` only. |
+| Fewer `.json` than `.csv` files in the ZIP | Ora only gives its official JSON export for projects you administer. The other projects have their `.csv` and their data in `ora-complement.json`, and their attachments are still downloaded (from the CSV). |
 | `TLS certificate error` | Open the **Applications** folder, then the **Python 3.x** folder, and double-click **Install Certificates.command**. Then run the command again. |
 | The connection dropped, or you closed the window | Run the same command again: nothing is lost, the tool resumes where it stopped. |
 
@@ -113,11 +126,12 @@ Manifest statuses: `ok`, `skipped` (already present and verified on a rerun), `f
 ### What is in the ZIP
 
 - One `<project>.json` per project you administer: the same file as Ora's **Export as JSON** button.
+- One `<project>.csv` per project: the columns of Ora's **Export as CSV** with every option on (description and comments, labels, attachments, story points, custom fields), plus an `Archived` column. Unlike Ora's, it has every task, archived ones included, full titles, dates as `YYYY-MM-DD`, and a status for projects with workflows. `ora_attachments.py` uses it for projects that have no `.json`.
 - `ora-complement.json`: Ora's own answers, unchanged, for every project you can see (positions, custom fields, workflows, views, sprints, recurring tasks, templates, folders, favorites, Team Chat). Nothing reads it yet: it lets a future import rebuild your projects as they were. `ora_attachments.py` leaves it alone.
 
 ### CSV limitation
 
-The CSV has **no attachment column** and only contains active tasks. The only files that can be found in it are the images embedded in task descriptions. In one real export, that was 15 files, versus 246 attachments in the JSON. The tool prints a warning whenever a project is read from CSV. Use the JSON whenever possible.
+Ora's default CSV has **no attachment column** and only contains active tasks. The only files that can be found in it are the images embedded in task descriptions. In one real export, that was 15 files, versus 246 attachments in the JSON. The tool prints a warning whenever a project is read from such a CSV. A CSV with an `Attachments` column (Ora's **Attachments** option, or the bookmark's CSV) is read in full.
 
 ### What the tools do not do
 

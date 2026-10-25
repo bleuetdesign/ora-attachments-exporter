@@ -2,6 +2,7 @@
 //
 // Saves all your Ora data in one ZIP file, "ora-backup-<date>.zip":
 // - the official "Export as JSON" file of every project you administer (the same file Ora's button gives);
+// - a spreadsheet (.csv) of every project, like Ora's "Export as CSV" with every option on, but with all tasks;
 // - "ora-complement.json": what that export leaves out (order of lists and tasks, custom fields, list
 //   workflows, views, sprints, recurring tasks, templates, folders, favorites, Team Chat), for every project.
 // Attachments are not in the ZIP: ora_attachments.py downloads them from it afterwards.
@@ -30,6 +31,7 @@
     'get_organization_projects', 'folder_contents', 'folders_root_layer', 'get_edit_projects',
     'get_shared_projects', 'get_starred_projects', 'get_starred_tasks', 'get_favorites',
     'get_tasks_view_configurations', 'project_all', 'export_project_json', 'get_project_views', 'get_sprint',
+    'get_project_task_comments', 'get_project_attachments',
     'project_get_more_activity_records', 'get_channels', 'get_shared_channels', 'get_threads',
     'get_channel_members', 'get_channel_messages',
   ]);
@@ -134,6 +136,76 @@
     return o;
   };
 
+  /* A spreadsheet of the project: the columns of Ora's "Export as CSV" with every option on, but with all tasks
+     (archived ones and those without a list included), dates as YYYY-MM-DD and an "Archived" column. */
+  const toCsv = (pd, comments, files) => {
+    const byId = (rows) => new Map((rows || []).map((r) => [r.id, r]));
+    const group = (rows, key) => {
+      const m = new Map();
+      for (const r of rows || []) { if (!m.has(r[key])) m.set(r[key], []); m.get(r[key]).push(r); }
+      return m;
+    };
+    const lists = byId(pd.lists);
+    const milestones = byId(pd.milestones);
+    const types = byId(pd.task_types);
+    const labels = byId(pd.labels);
+    const people = new Map((pd.developers || []).map((d) => [d.dev_id, d.full_name || d.username || '']));
+    const devs = group((pd.tasks_developers || []).filter((d) => d.status !== false), 'task_id');
+    const taskLabels = group(pd.tasks_labels, 'task_id');
+    const values = group((pd.task_custom_fields || []).filter((v) => !v.deleted), 'task_id');
+    const notes = group((Array.isArray(comments) ? comments : []).filter((c) => c.comment && !c.deleted), 'task_id');
+    const attached = group((Array.isArray(files) ? files : []).filter((f) => !f.deleted), 'task_id');
+    const fields = (pd.custom_fields || []).slice().sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+    const workflow = pd.features?.workflow;
+    const STATUS = workflow ? { 0: 'Frozen', 1: 'Open', 2: 'Closed', 3: 'Review', 4: 'Frozen' }
+      : { 0: 'Frozen', 1: 'Open', 2: 'Review', 3: 'Closed', 4: 'Frozen' };
+    const day = (d) => (d ? String(d).slice(0, 10) : '');
+    const hours = (t) => {
+      if (!t) return '';
+      const [h, m] = String(t).split(':').map(Number);
+      return Math.round(100 * (h + (m || 0) / 60)) / 100 || '';
+    };
+    const cell = (v) => {
+      const x = v == null ? '' : String(v);
+      return /[",;\r\n]|^\s|\s$/.test(x) ? `"${x.replace(/"/g, '""')}"` : x;
+    };
+    const custom = (t, f) => {
+      const v = (values.get(t.id) || []).find((x) => x.custom_field_id === f.id);
+      if (!v) return '';
+      switch (f.custom_field_type?.type) {
+        case 1: return (f.custom_field_type.options || []).find((o) => o.uuid === (v.selected_dropdowns || [])[0])?.text ?? '';
+        case 2: return v.numeric_value ?? '';
+        case 3: return v.text ?? '';
+        case 4: return (v.members || []).map((m) => (typeof m === 'object' ? m.full_name || m.fullName : people.get(m)) || '').join(',');
+        case 5: return day(v.date);
+        case 6: return v.is_checked ? 'checked' : '';
+        default: return '';
+      }
+    };
+    const rows = [['Global ID', 'List', 'ID', 'Title', 'Assignee', 'Milestone', 'Estimate', 'Tracked Time', 'Status',
+      'Task Type', 'Due Date', 'Updated', 'Description', 'Labels', 'Attachments', 'Story points', 'Completed story points',
+      'Business value', ...fields.map((f) => f.name), 'Archived']];
+    for (const t of pd.tasks || []) {
+      if (t.deleted) continue;
+      const list = lists.get(t.list_id);
+      let description = t.description || '';
+      const said = (notes.get(t.id) || []).sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
+      if (said.length) {
+        description += '\n\nCOMMENTS:' + said.map((c) => `\nAT: ${c.created_at}\nFROM: ${people.get(c.user_id) || ''}\nCOMMENT: ${c.comment}`).join('\n');
+      }
+      rows.push([t.id, list?.title ?? '', t.second_id, t.title,
+        (devs.get(t.id) || []).map((d) => people.get(d.dev_id) || '').join(','),
+        milestones.get(t.milestone_id)?.title ?? '', hours(t.estimated), t.tracked_time || '',
+        (workflow ? STATUS[list?.list_type] : STATUS[t.state]) ?? '', types.get(t.task_type)?.name ?? '',
+        day(t.due_date), day(t.updated_at), description,
+        (taskLabels.get(t.id) || []).map((l) => labels.get(l.label_id)?.title ?? '').join(','),
+        (attached.get(t.id) || []).map((f) => f.external_url || `https://ora-attachments.s3.amazonaws.com/${f.data_path}`).join(','),
+        t.points || '', t.points_done || '', t.value || '', ...fields.map((f) => custom(t, f)), t.archived ? 'yes' : '']);
+    }
+    /* The byte order mark lets Excel read accents correctly. */
+    return '\ufeff' + rows.map((r) => r.map(cell).join(',')).join('\r\n') + '\r\n';
+  };
+
   /* Minimal ZIP writer (files stored without compression). */
   const crcTable = Array.from({ length: 256 }, (_, n) => {
     let c = n;
@@ -192,7 +264,7 @@
     account: { id: user.id, username: user.username },
     options: OPTIONS,
     projects: {}, /* id -> title, for a quick look */
-    exported: {}, /* id -> name of the official JSON export in the ZIP */
+    exported: {}, /* id -> name of the official JSON export in the ZIP (the .csv has the same name) */
     responses: {}, /* intention -> key -> { request, status, data }: Ora's answers, unchanged */
     errors: [],
   };
@@ -265,15 +337,18 @@
       const projectTitle = pd.project?.title ?? '';
       out.projects[P] = projectTitle;
       progress(`Project ${n} of ${projectIds.size}: ${projectTitle}`);
+      const clean = (projectTitle.replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_').trim() || `project-${P}`).slice(0, 120);
+      let base = clean;
+      for (let k = 2; names.has(base.toLowerCase()); k++) base = `${clean}-${k}`;
+      names.add(base.toLowerCase());
       const official = await get({ intention: 'export_project_json', project_id: P }, P);
       if (official?.project) {
-        const base = (projectTitle.replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_').trim() || `project-${P}`).slice(0, 120);
-        let name = `${base}.json`;
-        for (let k = 2; names.has(name.toLowerCase()); k++) name = `${base}-${k}.json`;
-        names.add(name.toLowerCase());
-        out.exported[P] = name;
-        exports.push({ name, text: JSON.stringify(camel(official), null, 2) });
+        out.exported[P] = `${base}.json`;
+        exports.push({ name: `${base}.json`, text: JSON.stringify(camel(official), null, 2) });
       }
+      const comments = await get({ intention: 'get_project_task_comments', project_id: P }, P);
+      const files = await get({ intention: 'get_project_attachments', project_id: P }, P);
+      exports.push({ name: `${base}.csv`, text: toCsv(pd, comments, files) });
       if (pd.features?.views && pd.views?.length) await get({ intention: 'get_project_views', project_id: P }, P);
       for (const s of pd.sprints || []) await get({ intention: 'get_sprint', project_id: P, sprint_id: s.id }, `${P}_${s.id}`);
       if (OPTIONS.history) {
@@ -323,19 +398,20 @@
   window.__saveMyOraRunning = false;
 
   const total = Object.keys(out.projects).length;
-  const others = total - exports.length;
+  const official = Object.keys(out.exported).length;
+  const others = total - official;
   const fatal = out.errors.find((e) => e.fatal);
   show(fatal ? 'Saved, but stopped early' : 'Done! 🎉',
     `${a.download} is in your Downloads folder.`,
     (fatal ? `Problem: ${fatal.fatal}. Click "Save my Ora" again to retry. ` : '')
-    + `${total} project${total === 1 ? '' : 's'} saved.`
+    + `${total} project${total === 1 ? '' : 's'} saved, each with a spreadsheet (.csv).`
     + (others > 0 ? ` Ora only gives its official export for projects you administer: ${others} other`
-      + `${others === 1 ? ' is' : 's are'} in the complement only.` : '')
+      + `${others === 1 ? ' is' : 's are'} in the spreadsheets and the complement only.` : '')
     + ' Next step: the attachments, with ora_attachments.py.');
   const close = document.createElement('button');
   close.textContent = 'Close';
   close.style.cssText = 'margin-top:10px;padding:5px 14px;border:0;border-radius:6px;background:#1b9af7;color:#fff;font:inherit;cursor:pointer';
   close.onclick = () => box.remove();
   box.append(close);
-  log(`Done: ${exports.length} exports, ${total} projects, ${count} requests, ${(file.size / 1e6).toFixed(1)} MB.`, out.errors);
+  log(`Done: ${official} official exports, ${total} projects, ${count} requests, ${(file.size / 1e6).toFixed(1)} MB.`, out.errors);
 })();

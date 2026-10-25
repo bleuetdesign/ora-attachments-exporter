@@ -59,7 +59,8 @@
 <main>
   <h1>Save my Ora</h1>
   <p class="lead">Ora (ora.pm) shuts down on Saturday, October 31, 2026. Save your projects, their order, your custom
-    fields, Team Chat and your attachments, in a few minutes.</p>
+    fields, Team Chat and your attachments, in a few minutes. Two parts, in this order: the bookmark saves your data
+    (steps 1 and 2), then a small program downloads your attached files (step 3).</p>
 
   <ol class="steps">
     <li>
@@ -73,7 +74,9 @@
       <h2>Open Ora and click the bookmark</h2>
       <p>Go to <a href="https://app.ora.pm">app.ora.pm</a>, log in, then click <strong>Save my Ora</strong> in your
         bookmarks bar. A box shows the progress. Leave the tab open until it says <strong>Done</strong>.</p>
-      <p>The file <code>ora-backup-&lt;date&gt;.zip</code> lands in your <strong>Downloads</strong> folder.</p>
+      <p>The file <code>ora-backup-&lt;date&gt;.zip</code> lands in your <strong>Downloads</strong> folder. It holds,
+        for each project, Ora's official JSON export and a spreadsheet (CSV), plus what those exports leave out. You
+        don't need Ora's own export buttons anymore.</p>
     </li>
     <li>
       <h2>Download the attachments</h2>
@@ -92,7 +95,8 @@
   <details>
     <summary>What is in the ZIP, and is it safe?</summary>
     <p>The ZIP holds the official <em>Export as JSON</em> file of every project you administer (the same file as Ora's
-      own button) and <code>ora-complement.json</code>: what that export leaves out (the order of lists and tasks,
+      own button), a spreadsheet (<code>.csv</code>) of every project with all its tasks, archived ones included, and
+      <code>ora-complement.json</code>: what the exports leave out (the order of lists and tasks,
       custom fields, workflows, views, sprints, recurring tasks, templates, folders, favorites, Team Chat), for every
       project you can see. Nothing reads the complement yet: keep it, it lets a future import rebuild your projects as
       they were.</p>
