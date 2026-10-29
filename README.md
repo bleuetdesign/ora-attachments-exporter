@@ -13,7 +13,7 @@ Do them **in this order**: the second step needs the ZIP from the first. A web p
 
 ## Quick guide (Mac)
 
-About 10 minutes of your time, plus the backup itself: from a few minutes to 1 or 2 hours for a big account (about 3 requests per task). Nothing to buy, nothing to install.
+About 10 minutes of your time, plus the backup itself: from a few minutes to 1 or 2 hours for a big account (2 or 3 requests per task). Nothing to buy, nothing to install.
 
 ### 1. Save your data
 
@@ -127,7 +127,7 @@ Manifest statuses: `ok`, `skipped` (already present and verified on a rerun), `f
 
 - One `<project>.json` per project you administer: the same file as Ora's **Export as JSON** button.
 - One `<project>.csv` per project: the columns of Ora's **Export as CSV** with every option on (description and comments, labels, attachments, story points, custom fields), plus an `Archived` column. Unlike Ora's, it has every task, archived ones included, full titles, dates as `YYYY-MM-DD`, and a status for projects with workflows. `ora_attachments.py` uses it for projects that have no `.json`.
-- `ora-complement.json`: Ora's own answers, unchanged, for every project you can see (positions, custom fields, workflows, views, sprints, recurring tasks, templates, folders, favorites, Team Chat). Nothing reads it yet: it lets a future import rebuild your projects as they were. `ora_attachments.py` leaves it alone.
+- `ora-complement.json`: Ora's own answers, unchanged, for every project you can see (positions, custom fields, workflows, views, sprints, recurring tasks, templates, folders, favorites, Team Chat), and for every task its history, comments, timers and watchers. Ora keeps watchers, list automations and a few project settings for project admins: for the projects you don't administer, the backup skips them and lists those projects in `notAdministered`. Nothing reads it yet: it lets a future import rebuild your projects as they were. `ora_attachments.py` leaves it alone.
 
 ### CSV limitation
 
