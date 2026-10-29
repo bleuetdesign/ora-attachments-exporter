@@ -78,7 +78,10 @@
   stop.textContent = 'Stop and save now';
   stop.style.cssText = buttonStyle;
   stop.onclick = () => { stopRequested = true; stop.disabled = true; stop.textContent = 'Saving…'; };
-  box.append(title, line, note, stop);
+  const stopHint = document.createElement('div');
+  stopHint.style.cssText = 'margin-top:4px;color:#888;font-size:12px';
+  stopHint.textContent = 'Ends the backup now and downloads a ZIP with everything saved so far.';
+  box.append(title, line, note, stop, stopHint);
   document.body.append(box);
   const show = (t, l, n = '') => { title.textContent = t; line.textContent = l; note.textContent = n; };
   const log = (...a) => console.log('%c[Save my Ora]', 'color:#1b9af7;font-weight:bold', ...a);
@@ -514,6 +517,7 @@
 
   try { ws.close(); } catch { /* already closed */ }
   stop.remove();
+  stopHint.remove();
   show('Writing the ZIP file…', 'This can take a minute for a big account.');
   window.oraComplement = out;
   const file = await zip([...exports, { name: 'ora-complement.json', text: JSON.stringify(out) }]);
