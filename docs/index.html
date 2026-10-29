@@ -26,7 +26,8 @@
     font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   }
   main { max-width: 680px; margin: 0 auto; padding: 40px 16px 64px; }
-  h1 { font-size: 30px; margin: 0 0 6px; }
+  h1 { font-size: 30px; margin: 0 0 2px; }
+  .version { color: var(--muted); font-size: 13px; margin: 0 0 10px; min-height: 1.3em; }
   .lead { color: var(--muted); margin: 0 0 28px; }
   ol.steps { list-style: none; padding: 0; margin: 0; counter-reset: step; }
   ol.steps > li {
@@ -58,6 +59,7 @@
 <body>
 <main>
   <h1>Save my Ora</h1>
+  <p class="version" id="version"></p>
   <p class="lead">Ora (ora.pm) shuts down on Saturday, October 31, 2026. Save your projects, their order, your custom
     fields, the history and comments of every task, Team Chat and your attachments. Two parts, in this order: the
     bookmark saves your data (steps 1 and 2), then a small program downloads your attached files (step 3).</p>
@@ -130,6 +132,8 @@
   fetch('ora_backup.js', { cache: 'no-cache' })
     .then((r) => { if (!r.ok) throw new Error(r.status); return r.text(); })
     .then((code) => {
+      const v = code.match(/^\/\/ Save my Ora (\d+\.\d+\.\d+)/);
+      if (v) document.getElementById('version').textContent = 'Version ' + v[1];
       const body = code.split('\n').filter((l) => !/^\s*\/\//.test(l)).join('\n').trim().replace(/;$/, '');
       link.href = 'javascript:void ' + encodeURIComponent(body);
       link.removeAttribute('aria-disabled');
