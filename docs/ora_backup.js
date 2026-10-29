@@ -82,10 +82,23 @@
   document.body.append(box);
   const show = (t, l, n = '') => { title.textContent = t; line.textContent = l; note.textContent = n; };
   const log = (...a) => console.log('%c[Save my Ora]', 'color:#1b9af7;font-weight:bold', ...a);
+  /* Time left: the average time of the last 200 requests, times the number of requests still to send. Each part
+     of the backup sets "remaining" to its own estimate of that number. */
+  const stamps = [];
+  let remaining = () => null;
+  const timeLeft = () => {
+    const r = remaining();
+    if (r == null || stamps.length < 20) return '';
+    const ms = r * (stamps[stamps.length - 1] - stamps[0]) / (stamps.length - 1);
+    const min = Math.ceil(ms / 60000);
+    if (min <= 1) return 'less than a minute left';
+    return min < 60 ? `about ${min} min left` : `about ${Math.floor(min / 60)} h ${String(min % 60).padStart(2, '0')} min left`;
+  };
   const progress = (l) => {
-    show('Saving your Ora data…', l, 'Keep this tab visible (in its own window if you want to use other tabs) and '
-      + 'your computer awake: a hidden tab runs much slower.');
-    log(l);
+    const t = timeLeft();
+    show('Saving your Ora data…' + (t ? ` ${t}` : ''), l, 'Keep this tab visible (in its own window if you want to '
+      + 'use other tabs) and your computer awake: a hidden tab runs much slower.');
+    log(l, t);
   };
   progress('Starting…');
 
@@ -342,6 +355,8 @@
       if (Date.now() - since > 1800000) break;
     }
     count++;
+    stamps.push(Date.now());
+    if (stamps.length > 200) stamps.shift();
     const status = r[msg.intention];
     const data = await inflate(r.data);
     if (msg.intention === 'export_project_json') return status === 200 ? data : undefined;
@@ -397,7 +412,12 @@
     /* 2. Projects: the official export, and project_all (positions, custom fields, workflows, views, sprints…). */
     const names = new Set();
     const tasks = []; /* [project id, task id], read after Team Chat */
+    const perTask = OPTIONS.tasks ? 3 : 0;
     let n = 0;
+    /* Until all projects are read, the number of tasks is extrapolated from the projects read so far. */
+    const projectsStart = count;
+    remaining = () => (n < 2 ? null : (projectIds.size - n + 1) * ((count - projectsStart) / (n - 1))
+      + (tasks.length / (n - 1)) * projectIds.size * perTask);
     for (const P of [...projectIds].sort((a, b) => a - b)) {
       n++;
       const pa = await get({ intention: 'project_all', project_id: P, version: 4 }, P);
@@ -455,6 +475,8 @@
         await get({ intention: 'get_threads', organization_id: org }, org);
       }
       let c = 0;
+      const chatStart = count;
+      remaining = () => (channels.size - c + 1) * (c > 1 ? (count - chatStart) / (c - 1) : 3) + tasks.length * perTask;
       for (const ch of channels.values()) {
         progress(`Team Chat ${++c} of ${channels.size}: ${ch.name || 'direct messages'}`);
         await get({ intention: 'get_channel_members', channel_id: ch.id }, ch.id);
@@ -470,11 +492,12 @@
     /* 4. Each task: its card (timers, files, links…), its watchers, and its thread, which holds the task history
        ("moved this card"…) and the comments with their attachments. With after=1970, Ora sends the whole thread. */
     if (OPTIONS.tasks) {
-      const start = Date.now();
-      for (let i = 0; i < tasks.length; i++) {
+      const tasksStart = count;
+      let i = 0;
+      remaining = () => (tasks.length - i) * (i ? (count - tasksStart) / i : 3);
+      for (; i < tasks.length; i++) {
         const [P, T] = tasks[i];
-        const left = i ? Math.ceil(((Date.now() - start) / i) * (tasks.length - i) / 60000) : null;
-        progress(`Task ${i + 1} of ${tasks.length}` + (left == null ? '' : ` — about ${left} min left`));
+        progress(`Task ${i + 1} of ${tasks.length}`);
         const d = await get({ intention: 'all_task_data', project_id: P, task_id: T }, `${P}_${T}`);
         await get({ intention: 'get_task_watchers', project_id: P, task_id: T }, `${P}_${T}`);
         const th = d?.discussionThread?.id;
