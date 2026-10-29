@@ -18,8 +18,8 @@ About 10 minutes of your time, plus the backup itself: from a few minutes to 1 o
 ### 1. Save your data
 
 1. Open **https://bleuetdesign.github.io/ora-attachments-exporter/** and drag the **Save my Ora** button to your bookmarks bar.
-2. Open **https://app.ora.pm**, log in, then click **Save my Ora** in your bookmarks bar.
-3. A box shows the progress and the time left. **Keep the tab open and visible** (in its own window if you want to use other tabs) and your Mac **awake and plugged in** until it says **Done**. If you must stop, click **Stop and save now**: the ZIP holds everything saved so far.
+2. Open **https://app.ora.pm**, log in, then click **Save my Ora** in your bookmarks bar, and **Start a new backup** in the box that appears.
+3. A box shows the progress and the time left. **Keep the tab open and visible** (in its own window if you want to use other tabs) and your Mac **awake and plugged in** until it says **Done**. If you must stop, click **Stop and save now**: the ZIP holds everything saved so far. To continue later, click the bookmark again, choose **Resume from a ZIP…** and pick that ZIP: the backup goes on exactly where it stopped.
 
 The file **`ora-backup-<date>.zip`** lands in your **Downloads** folder.
 

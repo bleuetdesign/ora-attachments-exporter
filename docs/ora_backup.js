@@ -1,4 +1,4 @@
-// Save my Ora 1.3.0 — https://github.com/bleuetdesign/ora-attachments-exporter
+// Save my Ora 1.3.1 — https://github.com/bleuetdesign/ora-attachments-exporter
 //
 // Saves all your Ora data in one ZIP file, "ora-backup-<date>.zip":
 // - the official "Export as JSON" file of every project you administer (the same file Ora's button gives);
@@ -9,7 +9,8 @@
 //   timers and watchers.
 //
 // Saving every task takes long: about 3 requests per task, so 1 to 2 hours for 6,000 tasks. Keep the tab
-// visible and the computer awake. The "Stop and save now" button saves what is done so far.
+// visible and the computer awake. The "Stop and save now" button saves what is done so far; "Resume from a
+// ZIP…" then continues from that ZIP, exactly where it stopped, without asking Ora again for what it holds.
 // Attachments are not in the ZIP: ora_attachments.py downloads them from it afterwards.
 //
 // How to use: the simplest is the "Save my Ora" bookmark, from
@@ -81,7 +82,7 @@
   const stopHint = document.createElement('div');
   stopHint.style.cssText = 'margin-top:4px;color:#888;font-size:12px';
   stopHint.textContent = 'Ends the backup now and downloads a ZIP with everything saved so far.';
-  box.append(title, line, note, stop, stopHint);
+  box.append(title, line, note);
   document.body.append(box);
   const show = (t, l, n = '') => { title.textContent = t; line.textContent = l; note.textContent = n; };
   const log = (...a) => console.log('%c[Save my Ora]', 'color:#1b9af7;font-weight:bold', ...a);
@@ -103,7 +104,6 @@
       + 'use other tabs) and your computer awake: a hidden tab runs much slower.');
     log(l, t);
   };
-  progress('Starting…');
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -323,6 +323,81 @@
     return new Blob([...parts, ...central, new Uint8Array(end.buffer)], { type: 'application/zip' });
   };
 
+  /* Reads the .json files of a ZIP (ours, or one made again by the computer): name without folder -> text. */
+  const unzip = async (buf) => {
+    const v = new DataView(buf);
+    const dec = new TextDecoder();
+    let e = buf.byteLength - 22;
+    while (e >= 0 && v.getUint32(e, true) !== 0x06054b50) e--;
+    if (e < 0) throw new Error('this is not a ZIP file');
+    const files = new Map();
+    for (let k = 0, n = v.getUint16(e + 10, true), p = v.getUint32(e + 16, true); k < n; k++) {
+      const method = v.getUint16(p + 10, true);
+      const size = v.getUint32(p + 20, true);
+      const nameLength = v.getUint16(p + 28, true);
+      const local = v.getUint32(p + 42, true);
+      const name = dec.decode(new Uint8Array(buf, p + 46, nameLength));
+      p += 46 + nameLength + v.getUint16(p + 30, true) + v.getUint16(p + 32, true);
+      if (!/\.(json|csv)$/.test(name) || name.includes('__MACOSX')) continue;
+      const start = local + 30 + v.getUint16(local + 26, true) + v.getUint16(local + 28, true);
+      let bytes = new Uint8Array(buf, start, size);
+      if (method === 8) {
+        const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+        bytes = new Uint8Array(await new Response(stream).arrayBuffer());
+      } else if (method !== 0) throw new Error('unsupported compression in ' + name);
+      files.set(name.split('/').pop(), dec.decode(bytes));
+    }
+    return files;
+  };
+
+  /* Start a new backup, or resume one: the answers already in a previous ZIP of the same account are reused
+     instead of being asked again, so the backup goes on exactly where it stopped. Requests that had failed are
+     sent again. Safari may have opened the ZIP into a folder: its .json files can be chosen instead. */
+  let prev = null;
+  let prevFiles = new Map();
+  await new Promise((ready) => {
+    const begin = document.createElement('button');
+    begin.textContent = 'Start a new backup';
+    begin.style.cssText = buttonStyle;
+    const resume = document.createElement('button');
+    resume.textContent = 'Resume from a ZIP…';
+    resume.style.cssText = buttonStyle + ';margin-left:8px;background:#eef1f4;color:#222';
+    const hint = document.createElement('div');
+    hint.style.cssText = 'margin-top:4px;color:#888;font-size:12px';
+    hint.textContent = 'Resume: choose the ZIP of a backup you stopped with "Stop and save now". It continues where it stopped.';
+    const picker = document.createElement('input');
+    picker.type = 'file';
+    picker.accept = '.zip,.json';
+    picker.multiple = true;
+    const done = () => { begin.remove(); resume.remove(); hint.remove(); ready(); };
+    begin.onclick = done;
+    resume.onclick = () => picker.click();
+    picker.onchange = async () => {
+      try {
+        const files = new Map();
+        for (const f of picker.files) {
+          if (/\.zip$/i.test(f.name)) for (const [k, v] of await unzip(await f.arrayBuffer())) files.set(k, v);
+          else if (/\.json$/i.test(f.name)) files.set(f.name, await f.text());
+        }
+        const c = JSON.parse(files.get('ora-complement.json') || 'null');
+        if (c?.format !== 'ora-complement' || !c.responses) throw new Error('no ora-complement.json in it');
+        if (String(c.account?.id) !== String(user.id)) {
+          throw new Error(`it belongs to another account (${c.account?.username ?? c.account?.id})`);
+        }
+        prev = c;
+        prevFiles = files;
+        done();
+      } catch (err) {
+        picker.value = '';
+        line.textContent = `This file cannot be used: ${err.message}. Choose another one, or start a new backup.`;
+      }
+    };
+    show('Save my Ora', 'Save all your Ora data in one ZIP file.');
+    box.append(begin, resume, hint);
+  });
+  box.append(stop, stopHint);
+  progress(prev ? `Resuming the backup of ${String(prev.exportedAt).slice(0, 16).replace('T', ' ')}…` : 'Starting…');
+
   const out = {
     format: 'ora-complement',
     version: 2,
@@ -334,12 +409,23 @@
     responses: {}, /* intention -> key -> { request, status, data }: Ora's answers, unchanged */
     errors: [],
   };
+  if (prev) out.resumedFrom = [...(prev.resumedFrom || []), prev.exportedAt];
   const exports = [];
+  /* count: requests of the backup, reused ones included (the time left counts in requests per project or task);
+     sent: those really sent to Ora this time. */
   let count = 0;
+  let sent = 0;
   /* On a lost connection, keep reconnecting for up to 30 minutes before giving up on a request: a network
      outage or a short sleep of the computer must not lose everything. A request that times out is tried 4 times. */
   async function get(msg, key = 'all') {
     if (!READS.has(msg.intention)) throw new Error('Refused (not a read): ' + msg.intention);
+    if (stopRequested) throw new Error('stopped by you');
+    const saved = prev?.responses?.[msg.intention]?.[key];
+    if (saved && saved.status === 200 && JSON.stringify(saved.request) === JSON.stringify(msg)) {
+      count++;
+      (out.responses[msg.intention] ??= {})[key] = saved;
+      return saved.data;
+    }
     let r;
     for (let attempt = 0, since = Date.now(), timeouts = 0; ; attempt++) {
       if (stopRequested) throw new Error('stopped by you');
@@ -358,6 +444,7 @@
       if (Date.now() - since > 1800000) break;
     }
     count++;
+    sent++;
     stamps.push(Date.now());
     if (stamps.length > 200) stamps.shift();
     const status = r[msg.intention];
@@ -376,6 +463,8 @@
     if (me) {
       out.responses.socket_authentication = { me: { request: { intention: 'socket_authentication', client_type: 'web' },
         status: me.socket_authentication, data: scrub(await inflate(me.data)) } };
+    } else if (prev?.responses?.socket_authentication?.me) {
+      out.responses.socket_authentication = { me: prev.responses.socket_authentication.me };
     }
     for (const intention of ['get_edit_projects', 'get_shared_projects', 'get_starred_projects', 'get_starred_tasks',
       'get_favorites', 'get_tasks_view_configurations', 'get_tasks_view_preferences', 'get_user_emails',
@@ -433,10 +522,17 @@
       let base = clean;
       for (let k = 2; names.has(base.toLowerCase()); k++) base = `${clean}-${k}`;
       names.add(base.toLowerCase());
-      const official = await get({ intention: 'export_project_json', project_id: P }, P);
-      if (official?.project) {
+      const kept = prevFiles.get(prev?.exported?.[P]);
+      if (kept) {
+        count++;
         out.exported[P] = `${base}.json`;
-        exports.push({ name: `${base}.json`, text: JSON.stringify(camel(official), null, 2) });
+        exports.push({ name: `${base}.json`, text: kept });
+      } else {
+        const official = await get({ intention: 'export_project_json', project_id: P }, P);
+        if (official?.project) {
+          out.exported[P] = `${base}.json`;
+          exports.push({ name: `${base}.json`, text: JSON.stringify(camel(official), null, 2) });
+        }
       }
       const comments = await get({ intention: 'get_project_task_comments', project_id: P }, P);
       const files = await get({ intention: 'get_project_attachments', project_id: P }, P);
@@ -515,7 +611,24 @@
     log('Stopped early:', e);
   }
 
-  try { ws.close(); } catch { /* already closed */ }
+  /* A resumed backup that stops early keeps everything of the previous ZIP it had not reached yet. */
+  if (prev && out.errors.some((e) => e.fatal)) {
+    for (const [intention, keys] of Object.entries(prev.responses)) {
+      for (const [k, v] of Object.entries(keys)) {
+        if (v?.status === 200 && !out.responses[intention]?.[k]) (out.responses[intention] ??= {})[k] = v;
+      }
+    }
+    const used = new Set(exports.map((f) => f.name));
+    for (const [P, name] of Object.entries(prev.exported || {})) {
+      if (!out.exported[P] && !used.has(name) && prevFiles.has(name)) out.exported[P] = name;
+    }
+    for (const [P, title] of Object.entries(prev.projects || {})) out.projects[P] ??= title;
+    for (const [name, text] of prevFiles) {
+      if (name !== 'ora-complement.json' && !used.has(name)) exports.push({ name, text });
+    }
+  }
+
+  try { ws?.close(); } catch { /* already closed */ }
   stop.remove();
   stopHint.remove();
   show('Writing the ZIP file…', 'This can take a minute for a big account.');
@@ -549,5 +662,6 @@
   close.style.cssText = buttonStyle;
   close.onclick = () => box.remove();
   box.append(close);
-  log(`Done: ${official} official exports, ${total} projects, ${count} requests, ${(file.size / 1e6).toFixed(1)} MB.`, out.errors);
+  log(`Done: ${official} official exports, ${total} projects, ${sent} requests sent`
+    + (prev ? ` (${count - sent} reused from the previous ZIP)` : '') + `, ${(file.size / 1e6).toFixed(1)} MB.`, out.errors);
 })();
