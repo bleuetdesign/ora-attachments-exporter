@@ -59,8 +59,8 @@
 <main>
   <h1>Save my Ora</h1>
   <p class="lead">Ora (ora.pm) shuts down on Saturday, October 31, 2026. Save your projects, their order, your custom
-    fields, Team Chat and your attachments, in a few minutes. Two parts, in this order: the bookmark saves your data
-    (steps 1 and 2), then a small program downloads your attached files (step 3).</p>
+    fields, the history and comments of every task, Team Chat and your attachments. Two parts, in this order: the
+    bookmark saves your data (steps 1 and 2), then a small program downloads your attached files (step 3).</p>
 
   <ol class="steps">
     <li>
@@ -74,6 +74,16 @@
       <h2>Open Ora and click the bookmark</h2>
       <p>Go to <a href="https://app.ora.pm">app.ora.pm</a>, log in, then click <strong>Save my Ora</strong> in your
         bookmarks bar. A box shows the progress. Leave the tab open until it says <strong>Done</strong>.</p>
+      <p><strong>It takes a while:</strong> about 3 requests per task, so roughly 1 to 2 hours for 6,000 tasks (a
+        few minutes for a small account). The box shows the time left. Meanwhile:</p>
+      <ul>
+        <li>keep the Ora tab <strong>visible</strong>: a hidden tab runs much slower. To use other tabs, move the Ora
+          tab to its own window and don't minimize it;</li>
+        <li>keep your computer <strong>awake and plugged in</strong>, lid open. On a Mac, you can also type
+          <code>caffeinate -d</code> in Terminal and leave it open until the end;</li>
+        <li>if the connection drops, the bookmark reconnects by itself and continues. If you must stop, click
+          <strong>Stop and save now</strong>: you get a ZIP with everything saved so far.</li>
+      </ul>
       <p>The file <code>ora-backup-&lt;date&gt;.zip</code> lands in your <strong>Downloads</strong> folder. It holds,
         for each project, Ora's official JSON export and a spreadsheet (CSV), plus what those exports leave out. You
         don't need Ora's own export buttons anymore.</p>
@@ -97,12 +107,14 @@
     <p>The ZIP holds the official <em>Export as JSON</em> file of every project you administer (the same file as Ora's
       own button), a spreadsheet (<code>.csv</code>) of every project with all its tasks, archived ones included, and
       <code>ora-complement.json</code>: what the exports leave out (the order of lists and tasks,
-      custom fields, workflows, views, sprints, recurring tasks, templates, folders, favorites, Team Chat), for every
-      project you can see. Nothing reads the complement yet: keep it, it lets a future import rebuild your projects as
+      custom fields, workflows and column automations, views, sprints, recurring tasks, templates, folders, favorites,
+      Team Chat with archived channels, Git commits, your preferences), for every project you can see, and for every
+      task its history, comments, timers and watchers. Nothing reads the complement yet: keep it, it lets a future import rebuild your projects as
       they were.</p>
     <p>The bookmark only <strong>reads</strong>: every request is checked against a fixed list of read requests. It
       talks only to Ora, with the session you are logged in with, one request at a time. Nothing is sent anywhere else
-      and your session key is not saved in the file. <a href="ora_backup.js">Read the code</a>.</p>
+      and your session key is not saved in the file, nor any other key or password (integration tokens are removed
+      from your account data). <a href="ora_backup.js">Read the code</a>.</p>
     <p>The ZIP contains your teammates' names and email addresses and your chat messages: do not share it.</p>
   </details>
 

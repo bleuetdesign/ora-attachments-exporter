@@ -1,10 +1,15 @@
-// Save my Ora 1.2.0 — https://github.com/bleuetdesign/ora-attachments-exporter
+// Save my Ora 1.3.0 — https://github.com/bleuetdesign/ora-attachments-exporter
 //
 // Saves all your Ora data in one ZIP file, "ora-backup-<date>.zip":
 // - the official "Export as JSON" file of every project you administer (the same file Ora's button gives);
 // - a spreadsheet (.csv) of every project, like Ora's "Export as CSV" with every option on, but with all tasks;
 // - "ora-complement.json": what that export leaves out (order of lists and tasks, custom fields, list
-//   workflows, views, sprints, recurring tasks, templates, folders, favorites, Team Chat), for every project.
+//   workflows and automations, views, sprints, recurring tasks, templates, folders, favorites, Team Chat,
+//   Git commits, account preferences), for every project, and for every task its history, comments,
+//   timers and watchers.
+//
+// Saving every task takes long: about 3 requests per task, so 1 to 2 hours for 6,000 tasks. Keep the tab
+// visible and the computer awake. The "Stop and save now" button saves what is done so far.
 // Attachments are not in the ZIP: ora_attachments.py downloads them from it afterwards.
 //
 // How to use: the simplest is the "Save my Ora" bookmark, from
@@ -23,6 +28,7 @@
   const OPTIONS = {
     chat: true, /* Team Chat channels, members and messages */
     history: false, /* full activity history of each project (many requests: can take a long time) */
+    tasks: true, /* each task's history, comments, timers and watchers (3 requests per task: the longest part) */
     pause: 300, /* milliseconds between two requests */
   };
 
@@ -33,7 +39,10 @@
     'get_tasks_view_configurations', 'project_all', 'export_project_json', 'get_project_views', 'get_sprint',
     'get_project_task_comments', 'get_project_attachments',
     'project_get_more_activity_records', 'get_channels', 'get_shared_channels', 'get_threads',
-    'get_channel_members', 'get_channel_messages',
+    'get_channel_members', 'get_channel_messages', 'get_archived_channels',
+    'get_tasks_view_preferences', 'get_user_emails', 'get_templates', 'get_organization_csv_settings',
+    'get_time_labels', 'get_project_watchers', 'get_project_csv_settings', 'get_shared_custom_fields',
+    'get_list_actions', 'project_get_commits', 'all_task_data', 'get_task_watchers',
   ]);
 
   if (location.host !== 'app.ora.pm') {
@@ -63,14 +72,42 @@
   const line = document.createElement('div');
   const note = document.createElement('div');
   note.style.cssText = 'margin-top:8px;color:#666;font-size:13px';
-  box.append(title, line, note);
+  const buttonStyle = 'margin-top:10px;padding:5px 14px;border:0;border-radius:6px;background:#1b9af7;color:#fff;font:inherit;cursor:pointer';
+  let stopRequested = false;
+  const stop = document.createElement('button');
+  stop.textContent = 'Stop and save now';
+  stop.style.cssText = buttonStyle;
+  stop.onclick = () => { stopRequested = true; stop.disabled = true; stop.textContent = 'Saving…'; };
+  box.append(title, line, note, stop);
   document.body.append(box);
   const show = (t, l, n = '') => { title.textContent = t; line.textContent = l; note.textContent = n; };
   const log = (...a) => console.log('%c[Save my Ora]', 'color:#1b9af7;font-weight:bold', ...a);
-  const progress = (l) => { show('Saving your Ora data…', l, 'Keep this tab open. You can use other tabs meanwhile.'); log(l); };
+  const progress = (l) => {
+    show('Saving your Ora data…', l, 'Keep this tab visible (in its own window if you want to use other tabs) and '
+      + 'your computer awake: a hidden tab runs much slower.');
+    log(l);
+  };
   progress('Starting…');
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  /* Ask the computer not to go to sleep while the tab is visible (not available in every browser). */
+  let wakeLock = null;
+  const keepAwake = async () => {
+    try { if (document.visibilityState === 'visible') wakeLock = await navigator.wakeLock?.request('screen'); } catch { /* refused */ }
+  };
+  document.addEventListener('visibilitychange', keepAwake);
+  keepAwake();
+
+  /* Account fields that must never be saved: integration tokens, secrets, passwords, calendar feeds, API keys.
+     Booleans such as "password_set" say nothing secret and stay. */
+  const SECRET = /token|secret|passw|api_?key|private_?key|signature|cookie|session|ical|feed/i;
+  const scrub = (x) => {
+    if (Array.isArray(x)) return x.map(scrub);
+    if (!x || typeof x !== 'object') return x;
+    return Object.fromEntries(Object.entries(x).filter(([k, v]) => !(SECRET.test(k) && typeof v !== 'boolean'))
+      .map(([k, v]) => [k, scrub(v)]));
+  };
 
   /* A separate connection to Ora, so the app itself is not disturbed. */
   let ws;
@@ -89,7 +126,7 @@
       let m;
       try { m = JSON.parse(ev.data); } catch { return; }
       if (!m || typeof m !== 'object') return;
-      if (m.request === 'socket_authentication' && onAuth) onAuth();
+      if (m.request === 'socket_authentication' && onAuth) onAuth(m);
       const w = waiting.get(Number(m.action_id));
       if (w) { waiting.delete(Number(m.action_id)); w(m); }
     };
@@ -100,12 +137,15 @@
     ws.send(JSON.stringify({ ...msg, action_id: id, token }));
     setTimeout(() => { if (waiting.delete(id)) ok({ timeout: true }); }, timeout);
   });
+  /* Ora's answer to the login of this connection: the full account (preferences, etc.). Kept from the first one. */
+  let me = null;
   const connect = async () => {
     await open();
     const authed = new Promise((ok) => { onAuth = ok; setTimeout(ok, 10000); });
     ws.send(JSON.stringify({ intention: 'socket_authentication', client_type: 'web', token,
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }));
-    await authed;
+    const m = await authed;
+    if (m && !me) me = m;
   };
 
   /* Large answers come compressed (zlib), as raw bytes or as base64. */
@@ -206,7 +246,14 @@
     return '\ufeff' + rows.map((r) => r.map(cell).join(',')).join('\r\n') + '\r\n';
   };
 
-  /* Minimal ZIP writer (files stored without compression). */
+  /* Minimal ZIP writer. Files are compressed when the browser can (JSON shrinks about tenfold: a big account
+     can hold several hundred MB of JSON), and stored as they are otherwise. */
+  const deflate = async (bytes) => {
+    try {
+      const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream('deflate-raw'));
+      return new Uint8Array(await new Response(stream).arrayBuffer());
+    } catch { return null; }
+  };
   const crcTable = Array.from({ length: 256 }, (_, n) => {
     let c = n;
     for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
@@ -217,7 +264,7 @@
     for (const b of bytes) c = crcTable[(c ^ b) & 255] ^ (c >>> 8);
     return (c ^ 0xFFFFFFFF) >>> 0;
   };
-  const zip = (files) => {
+  const zip = async (files) => {
     const enc = new TextEncoder();
     const now = new Date();
     const time = (now.getHours() << 11) | (now.getMinutes() << 5) | (now.getSeconds() >> 1);
@@ -227,8 +274,11 @@
     let offset = 0;
     for (const f of files) {
       const name = enc.encode(f.name);
-      const data = enc.encode(f.text);
-      const crc = crc32(data);
+      const raw = enc.encode(f.text);
+      const crc = crc32(raw);
+      const packed = await deflate(raw);
+      const method = packed && packed.length < raw.length ? 8 : 0;
+      const data = method ? packed : raw;
       const head = (centralEntry) => {
         const h = new DataView(new ArrayBuffer((centralEntry ? 46 : 30) + name.length));
         let i = 0;
@@ -236,7 +286,7 @@
         const u16 = (v) => { h.setUint16(i, v, true); i += 2; };
         u32(centralEntry ? 0x02014b50 : 0x04034b50);
         if (centralEntry) u16(20);
-        u16(20); u16(0x0800); u16(0); u16(time); u16(date); u32(crc); u32(data.length); u32(data.length);
+        u16(20); u16(0x0800); u16(method); u16(time); u16(date); u32(crc); u32(data.length); u32(raw.length);
         u16(name.length); u16(0);
         if (centralEntry) { u16(0); u16(0); u16(0); u32(0); u32(offset); }
         new Uint8Array(h.buffer).set(name, i);
@@ -259,7 +309,7 @@
 
   const out = {
     format: 'ora-complement',
-    version: 1,
+    version: 2,
     exportedAt: new Date().toISOString(),
     account: { id: user.id, username: user.username },
     options: OPTIONS,
@@ -270,17 +320,26 @@
   };
   const exports = [];
   let count = 0;
+  /* On a lost connection, keep reconnecting for up to 30 minutes before giving up on a request: a network
+     outage or a short sleep of the computer must not lose everything. A request that times out is tried 4 times. */
   async function get(msg, key = 'all') {
     if (!READS.has(msg.intention)) throw new Error('Refused (not a read): ' + msg.intention);
     let r;
-    for (let attempt = 0; attempt < 4; attempt++) {
+    for (let attempt = 0, since = Date.now(), timeouts = 0; ; attempt++) {
+      if (stopRequested) throw new Error('stopped by you');
       if (!ws || ws.readyState !== WebSocket.OPEN) {
-        if (attempt) { progress('Connection lost, reconnecting…'); await sleep(5000 * attempt); }
-        try { await connect(); } catch (e) { r = { closed: true }; continue; }
+        if (attempt) {
+          show('Connection lost, reconnecting…', 'Your data is safe: the backup continues where it stopped.',
+            'Check your internet connection.');
+          await sleep(Math.min(5000 * attempt, 60000));
+        }
+        try { await connect(); } catch (e) { r = { closed: true }; if (Date.now() - since > 1800000) break; continue; }
       }
       await sleep(OPTIONS.pause);
       r = await send(msg);
       if (!r.timeout && !r.closed) break;
+      if (r.timeout && ++timeouts >= 4) break;
+      if (Date.now() - since > 1800000) break;
     }
     count++;
     const status = r[msg.intention];
@@ -296,8 +355,14 @@
     progress('Looking for your projects…');
     const orgsData = await get({ intention: 'get_organizations' });
     const orgs = (Array.isArray(orgsData) ? orgsData : orgsData?.organizations || []).map((o) => String(o.id));
+    if (me) {
+      out.responses.socket_authentication = { me: { request: { intention: 'socket_authentication', client_type: 'web' },
+        status: me.socket_authentication, data: scrub(await inflate(me.data)) } };
+    }
     for (const intention of ['get_edit_projects', 'get_shared_projects', 'get_starred_projects', 'get_starred_tasks',
-      'get_favorites', 'get_tasks_view_configurations']) await get({ intention });
+      'get_favorites', 'get_tasks_view_configurations', 'get_tasks_view_preferences', 'get_user_emails',
+      'get_templates']) await get({ intention });
+    await get({ intention: 'get_templates', mine: true }, 'mine');
     const projectIds = new Set();
     const addProjects = (d) => { for (const p of (Array.isArray(d) ? d : d?.projects) || []) if (p?.id) projectIds.add(p.id); };
     const folders = [];
@@ -324,10 +389,14 @@
       await get({ intention: 'get_organization', organization_id: org }, org);
       await get({ intention: 'organization_members', organization_id: org }, org);
       addProjects(await get({ intention: 'get_organization_projects', organization_id: org }, org));
+      await get({ intention: 'get_organization_csv_settings', organization_id: org }, org);
+      await get({ intention: 'get_templates', organization_id: org, mine: true, system: true }, `org${org}_mine`);
+      await get({ intention: 'get_templates', organization_id: org, mine: false }, `org${org}_others`);
     }
 
     /* 2. Projects: the official export, and project_all (positions, custom fields, workflows, views, sprints…). */
     const names = new Set();
+    const tasks = []; /* [project id, task id], read after Team Chat */
     let n = 0;
     for (const P of [...projectIds].sort((a, b) => a - b)) {
       n++;
@@ -351,6 +420,21 @@
       exports.push({ name: `${base}.csv`, text: toCsv(pd, comments, files) });
       if (pd.features?.views && pd.views?.length) await get({ intention: 'get_project_views', project_id: P }, P);
       for (const s of pd.sprints || []) await get({ intention: 'get_sprint', project_id: P, sprint_id: s.id }, `${P}_${s.id}`);
+      await get({ intention: 'get_time_labels', project_id: P }, P);
+      await get({ intention: 'get_project_watchers', project_id: P }, P);
+      await get({ intention: 'get_project_csv_settings', project_id: P }, P);
+      const O = pd.project?.organization_id;
+      if (O) await get({ intention: 'get_shared_custom_fields', project_id: P, organization_id: O }, `${P}_${O}`);
+      for (const l of pd.lists || []) await get({ intention: 'get_list_actions', project_id: P, list_id: l.id }, `${P}_${l.id}`);
+      /* project_all only gives the last 20 commits. The first page (from 0) usually holds them all. */
+      if (pd.commits?.length) {
+        for (let k = 0; k < 1000000;) {
+          const c = await get({ intention: 'project_get_commits', project_id: P, current_records: k }, `${P}_${k}`);
+          if (!Array.isArray(c) || c.length === 0) break;
+          k += c.length;
+        }
+      }
+      for (const t of pd.tasks) tasks.push([P, t.id]);
       if (OPTIONS.history) {
         for (let k = (pd.activity || []).length; k < 100000;) {
           const a = await get({ intention: 'project_get_more_activity_records', project_id: P, current_records: k }, `${P}_${k}`);
@@ -367,6 +451,7 @@
       await get({ intention: 'get_shared_channels' });
       for (const org of orgs) {
         addChannels(await get({ intention: 'get_channels', organization_id: org }, org));
+        addChannels(await get({ intention: 'get_archived_channels', organization_id: org }, org));
         await get({ intention: 'get_threads', organization_id: org }, org);
       }
       let c = 0;
@@ -381,14 +466,36 @@
         }
       }
     }
+
+    /* 4. Each task: its card (timers, files, links…), its watchers, and its thread, which holds the task history
+       ("moved this card"…) and the comments with their attachments. With after=1970, Ora sends the whole thread. */
+    if (OPTIONS.tasks) {
+      const start = Date.now();
+      for (let i = 0; i < tasks.length; i++) {
+        const [P, T] = tasks[i];
+        const left = i ? Math.ceil(((Date.now() - start) / i) * (tasks.length - i) / 60000) : null;
+        progress(`Task ${i + 1} of ${tasks.length}` + (left == null ? '' : ` — about ${left} min left`));
+        const d = await get({ intention: 'all_task_data', project_id: P, task_id: T }, `${P}_${T}`);
+        await get({ intention: 'get_task_watchers', project_id: P, task_id: T }, `${P}_${T}`);
+        const th = d?.discussionThread?.id;
+        if (th) {
+          await get({ intention: 'get_channel_messages', after: '1970-01-01T00:00:00Z', discussion_thread: th,
+            project_id: P, version: 2 }, `thread_${th}`);
+        }
+      }
+    }
   } catch (e) {
     out.errors.push({ fatal: String((e && e.message) || e) });
     log('Stopped early:', e);
   }
 
   try { ws.close(); } catch { /* already closed */ }
+  stop.remove();
+  show('Writing the ZIP file…', 'This can take a minute for a big account.');
   window.oraComplement = out;
-  const file = zip([...exports, { name: 'ora-complement.json', text: JSON.stringify(out) }]);
+  const file = await zip([...exports, { name: 'ora-complement.json', text: JSON.stringify(out) }]);
+  document.removeEventListener('visibilitychange', keepAwake);
+  try { await wakeLock?.release(); } catch { /* already released */ }
   const a = document.createElement('a');
   a.href = URL.createObjectURL(file);
   a.download = `ora-backup-${out.exportedAt.slice(0, 10)}.zip`;
@@ -401,16 +508,18 @@
   const official = Object.keys(out.exported).length;
   const others = total - official;
   const fatal = out.errors.find((e) => e.fatal);
+  const byYou = fatal?.fatal === 'stopped by you';
   show(fatal ? 'Saved, but stopped early' : 'Done! 🎉',
     `${a.download} is in your Downloads folder.`,
-    (fatal ? `Problem: ${fatal.fatal}. Click "Save my Ora" again to retry. ` : '')
+    (byYou ? 'It holds what was saved before you stopped. ' : '')
+    + (fatal && !byYou ? `Problem: ${fatal.fatal}. Click "Save my Ora" again to retry. ` : '')
     + `${total} project${total === 1 ? '' : 's'} saved, each with a spreadsheet (.csv).`
     + (others > 0 ? ` Ora only gives its official export for projects you administer: ${others} other`
       + `${others === 1 ? ' is' : 's are'} in the spreadsheets and the complement only.` : '')
     + ' Next step: the attachments, with ora_attachments.py.');
   const close = document.createElement('button');
   close.textContent = 'Close';
-  close.style.cssText = 'margin-top:10px;padding:5px 14px;border:0;border-radius:6px;background:#1b9af7;color:#fff;font:inherit;cursor:pointer';
+  close.style.cssText = buttonStyle;
   close.onclick = () => box.remove();
   box.append(close);
   log(`Done: ${official} official exports, ${total} projects, ${count} requests, ${(file.size / 1e6).toFixed(1)} MB.`, out.errors);
