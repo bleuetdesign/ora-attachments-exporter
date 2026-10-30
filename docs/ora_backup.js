@@ -1,4 +1,4 @@
-// Save my Ora 1.3.2 — https://github.com/bleuetdesign/ora-attachments-exporter
+// Save my Ora 1.4.0 — https://github.com/bleuetdesign/ora-attachments-exporter
 //
 // Saves all your Ora data in one ZIP file, "ora-backup-<date>.zip":
 // - the official "Export as JSON" file of every project you administer (the same file Ora's button gives);
@@ -13,6 +13,8 @@
 // visible and the computer awake. The "Stop and save now" button saves what is done so far; "Resume from a
 // ZIP…" then continues from that ZIP, exactly where it stopped, without asking Ora again for what it holds.
 // Attachments are not in the ZIP: ora_attachments.py downloads them from it afterwards.
+// "Project activity only" saves just the activity feed of every project ("ora-activity-<date>.zip"), which the
+// full backup leaves out because it takes many requests: keep that ZIP next to the backup one.
 //
 // How to use: the simplest is the "Save my Ora" bookmark, from
 // https://bleuetdesign.github.io/ora-attachments-exporter/. You can also paste this file into the browser
@@ -356,6 +358,7 @@
      sent again. Safari may have opened the ZIP into a folder: its .json files can be chosen instead. */
   let prev = null;
   let prevFiles = new Map();
+  let activityOnly = false;
   await new Promise((ready) => {
     const begin = document.createElement('button');
     begin.textContent = 'Start a new backup';
@@ -366,12 +369,19 @@
     const hint = document.createElement('div');
     hint.style.cssText = 'margin-top:4px;color:#888;font-size:12px';
     hint.textContent = 'Resume: choose the ZIP of a backup you stopped with "Stop and save now". It continues where it stopped.';
+    const activity = document.createElement('button');
+    activity.textContent = 'Project activity only';
+    activity.style.cssText = buttonStyle + ';background:#eef1f4;color:#222';
+    const activityHint = document.createElement('div');
+    activityHint.style.cssText = 'margin-top:4px;color:#888;font-size:12px';
+    activityHint.textContent = 'Saves only the activity feed of every project, which the backup leaves out, in a separate ZIP.';
     const picker = document.createElement('input');
     picker.type = 'file';
     picker.accept = '.zip,.json';
     picker.multiple = true;
-    const done = () => { begin.remove(); resume.remove(); hint.remove(); ready(); };
+    const done = () => { for (const e of [begin, resume, hint, activity, activityHint]) e.remove(); ready(); };
     begin.onclick = done;
+    activity.onclick = () => { activityOnly = true; done(); };
     resume.onclick = () => picker.click();
     picker.onchange = async () => {
       try {
@@ -387,6 +397,7 @@
         }
         prev = c;
         prevFiles = files;
+        activityOnly = c.mode === 'activity';
         done();
       } catch (err) {
         picker.value = '';
@@ -394,14 +405,16 @@
       }
     };
     show('Save my Ora', 'Save all your Ora data in one ZIP file.');
-    box.append(begin, resume, hint);
+    box.append(begin, resume, hint, activity, activityHint);
   });
+  if (activityOnly) Object.assign(OPTIONS, { chat: false, tasks: false, history: true });
   box.append(stop, stopHint);
   progress(prev ? `Resuming the backup of ${String(prev.exportedAt).slice(0, 16).replace('T', ' ')}…` : 'Starting…');
 
   const out = {
     format: 'ora-complement',
     version: 2,
+    mode: activityOnly ? 'activity' : 'full', /* activity: only project_all and the activity of each project */
     exportedAt: new Date().toISOString(),
     account: { id: user.id, username: user.username },
     options: OPTIONS,
@@ -514,6 +527,14 @@
     const projectsStart = count;
     remaining = () => (n < 2 ? null : (projectIds.size - n + 1) * ((count - projectsStart) / (n - 1))
       + (taskReads / (n - 1)) * projectIds.size);
+    /* The activity feed comes 10 entries at a time, after the ones project_all already gives. */
+    const activity = async (P, pd) => {
+      for (let k = (pd.activity || []).length; k < 100000;) {
+        const a = await get({ intention: 'project_get_more_activity_records', project_id: P, current_records: k }, `${P}_${k}`);
+        if (!Array.isArray(a) || a.length === 0) break;
+        k += a.length;
+      }
+    };
     for (const P of [...projectIds].sort((a, b) => a - b)) {
       n++;
       const pa = await get({ intention: 'project_all', project_id: P, version: 4 }, P);
@@ -522,6 +543,10 @@
       const projectTitle = pd.project?.title ?? '';
       out.projects[P] = projectTitle;
       progress(`Project ${n} of ${projectIds.size}: ${projectTitle}`);
+      if (activityOnly) {
+        await activity(P, pd);
+        continue;
+      }
       const clean = (projectTitle.replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_').trim() || `project-${P}`).slice(0, 120);
       let base = clean;
       for (let k = 2; names.has(base.toLowerCase()); k++) base = `${clean}-${k}`;
@@ -557,13 +582,7 @@
       if (O) await get({ intention: 'get_shared_custom_fields', project_id: P, organization_id: O }, `${P}_${O}`);
       for (const t of pd.tasks) tasks.push([P, t.id, admin]);
       taskReads += pd.tasks.length * (OPTIONS.tasks ? (admin ? 3 : 2) : 0);
-      if (OPTIONS.history) {
-        for (let k = (pd.activity || []).length; k < 100000;) {
-          const a = await get({ intention: 'project_get_more_activity_records', project_id: P, current_records: k }, `${P}_${k}`);
-          if (!Array.isArray(a) || a.length === 0) break;
-          k += a.length;
-        }
-      }
+      if (OPTIONS.history) await activity(P, pd);
       if (!admin) continue;
       if (pd.features?.views && pd.views?.length) await get({ intention: 'get_project_views', project_id: P }, P);
       await get({ intention: 'get_time_labels', project_id: P }, P);
@@ -659,7 +678,7 @@
   try { await wakeLock?.release(); } catch { /* already released */ }
   const a = document.createElement('a');
   a.href = URL.createObjectURL(file);
-  a.download = `ora-backup-${out.exportedAt.slice(0, 10)}.zip`;
+  a.download = `ora-${activityOnly ? 'activity' : 'backup'}-${out.exportedAt.slice(0, 10)}.zip`;
   document.body.append(a);
   a.click();
   a.remove();
@@ -674,10 +693,12 @@
     `${a.download} is in your Downloads folder.`,
     (byYou ? 'It holds what was saved before you stopped. ' : '')
     + (fatal && !byYou ? `Problem: ${fatal.fatal}. Click "Save my Ora" again to retry. ` : '')
-    + `${total} project${total === 1 ? '' : 's'} saved, each with a spreadsheet (.csv).`
-    + (others > 0 ? ` Ora only gives its official export for projects you administer: ${others} other`
-      + `${others === 1 ? ' is' : 's are'} in the spreadsheets and the complement only.` : '')
-    + ' Next step: the attachments, with ora_attachments.py.');
+    + (activityOnly ? `The activity of ${total} project${total === 1 ? '' : 's'} is saved. Keep this ZIP next to your`
+      + ' backup ZIP.'
+      : `${total} project${total === 1 ? '' : 's'} saved, each with a spreadsheet (.csv).`
+      + (others > 0 ? ` Ora only gives its official export for projects you administer: ${others} other`
+        + `${others === 1 ? ' is' : 's are'} in the spreadsheets and the complement only.` : '')
+      + ' Next step: the attachments, with ora_attachments.py.'));
   const close = document.createElement('button');
   close.textContent = 'Close';
   close.style.cssText = buttonStyle;

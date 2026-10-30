@@ -32,7 +32,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import parse_qsl, quote, unquote, urlencode, urlsplit, urlunsplit
 
-__version__ = "1.3.2"
+__version__ = "1.4.0"
 DOWNLOADS = Path.home() / "Downloads"
 DEFAULT_OUT = Path.home() / "Documents" / "Ora - Attachments"
 BOOKMARK_PAGE = "https://bleuetdesign.github.io/ora-attachments-exporter/"

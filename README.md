@@ -21,6 +21,8 @@ About 10 minutes of your time, plus the backup itself: from a few minutes to 1 o
 2. Open **https://app.ora.pm**, log in, then click **Save my Ora** in your bookmarks bar, and **Start a new backup** in the box that appears.
 3. A box shows the progress and the time left. **Keep the tab open and visible** (in its own window if you want to use other tabs) and your Mac **awake and plugged in** until it says **Done**. If you must stop, click **Stop and save now**: the ZIP holds everything saved so far. To continue later, click the bookmark again, choose **Resume from a ZIP…** and pick that ZIP: the backup goes on exactly where it stopped.
 
+   Optional, once the backup is done: click the bookmark again and choose **Project activity only**. It saves the activity feed of every project (who did what, project by project), which the backup leaves out because it takes many requests, in a separate `ora-activity-<date>.zip`. Keep it next to the backup ZIP.
+
 The file **`ora-backup-<date>.zip`** lands in your **Downloads** folder.
 
 ### 2. Download the attachments
@@ -127,7 +129,7 @@ Manifest statuses: `ok`, `skipped` (already present and verified on a rerun), `f
 
 - One `<project>.json` per project you administer: the same file as Ora's **Export as JSON** button.
 - One `<project>.csv` per project: the columns of Ora's **Export as CSV** with every option on (description and comments, labels, attachments, story points, custom fields), plus an `Archived` column. Unlike Ora's, it has every task, archived ones included, full titles, dates as `YYYY-MM-DD`, and a status for projects with workflows. `ora_attachments.py` uses it for projects that have no `.json`.
-- `ora-complement.json`: Ora's own answers, unchanged, for every project you can see (positions, custom fields, workflows, views, sprints, recurring tasks, templates, folders, favorites, Team Chat), and for every task its history, comments, timers and watchers. Ora keeps watchers, list automations and a few project settings for project admins: for the projects you don't administer, the backup skips them and lists those projects in `notAdministered`. Nothing reads it yet: it lets a future import rebuild your projects as they were. `ora_attachments.py` leaves it alone.
+- `ora-complement.json`: Ora's own answers, unchanged, for every project you can see (positions, custom fields, workflows, views, sprints, recurring tasks, templates, folders, favorites, Team Chat), and for every task its history, comments, timers and watchers. Ora keeps watchers, list automations and a few project settings for project admins: for the projects you don't administer, the backup skips them and lists those projects in `notAdministered`. A **Project activity only** run writes the same file (with `"mode": "activity"`) in `ora-activity-<date>.zip`, with each project's `project_all` and its activity feed. Nothing reads it yet: it lets a future import rebuild your projects as they were. `ora_attachments.py` leaves it alone.
 
 ### CSV limitation
 
