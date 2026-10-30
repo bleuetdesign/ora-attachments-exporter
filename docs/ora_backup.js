@@ -527,10 +527,16 @@
     const projectsStart = count;
     remaining = () => (n < 2 ? null : (projectIds.size - n + 1) * ((count - projectsStart) / (n - 1))
       + (taskReads / (n - 1)) * projectIds.size);
-    /* The activity feed comes 10 entries at a time, after the ones project_all already gives. */
+    /* The activity feed comes 10 entries at a time, after the ones project_all already gives. Ora refuses it to
+       non-admins: a 400 on the first page means you don't administer the project. */
     const activity = async (P, pd) => {
-      for (let k = (pd.activity || []).length; k < 100000;) {
-        const a = await get({ intention: 'project_get_more_activity_records', project_id: P, current_records: k }, `${P}_${k}`);
+      for (let k = (pd.activity || []).length, first = true; k < 100000; first = false) {
+        const key = `${P}_${k}`;
+        const a = await get({ intention: 'project_get_more_activity_records', project_id: P, current_records: k }, key, first);
+        if (first && out.responses.project_get_more_activity_records[key].status === 400) {
+          if (!out.notAdministered.includes(P)) out.notAdministered.push(P);
+          break;
+        }
         if (!Array.isArray(a) || a.length === 0) break;
         k += a.length;
       }
@@ -653,7 +659,7 @@
   if (prev && out.errors.some((e) => e.fatal)) {
     for (const [intention, keys] of Object.entries(prev.responses)) {
       for (const [k, v] of Object.entries(keys)) {
-        const kept = v?.status === 200 || (intention === 'get_project_watchers' && v?.status === 400);
+        const kept = v?.status === 200 || (v?.status === 400 && prev.notAdministered?.includes(v.request?.project_id));
         if (kept && !out.responses[intention]?.[k]) (out.responses[intention] ??= {})[k] = v;
       }
     }
